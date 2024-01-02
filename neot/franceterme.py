@@ -9,7 +9,7 @@ import json
 def parse_france_terme(tree):
     triples = []
     fem_reg = re.compile(r", -\w+")
-    article_reg = re.compile(r" \(l[’ae]s?\)")
+    article_reg = re.compile(r" \(.+\)")
     
     for article in articles:
         def_fr = article.find("Definition").text.strip()
