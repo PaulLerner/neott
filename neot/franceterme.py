@@ -48,11 +48,15 @@ def parse_france_terme(tree):
         triples.append({
             "Dom": surdoms, 
             "S-dom": sousdoms,
-            "fr": fr_term,
-            "fr_def": def_fr,
-            "fr_syn": fr_terms,
-            "en": en_term,
-            "en_syn": en_terms,
+            "fr": {
+                    "text": fr_term,
+                    "def": def_fr,
+                    "syn": fr_terms
+            },
+            "en": {
+                    "text": en_term,
+                    "syn": en_terms
+            },
             "id": article.attrib['numero']
         })
     

@@ -24,7 +24,7 @@ def count(batch, automaton, counter):
 def main(glossary: str, corpus: str, output:str, lang: str = "fr"):
     with open(glossary,"rt") as file:
         glossary = json.load(file)    
-    terms = set(item[lang].lower().strip() for item in glossary)
+    terms = set(item[lang]["text"].lower().strip() for item in glossary)
     automaton = build_automaton(terms)
     corpus = datasets.load_from_disk(corpus)
     counter = Counter()
