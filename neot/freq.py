@@ -22,6 +22,7 @@ def count(batch, automaton, counter):
 
 
 def main(glossary: str, corpus: str, output:str, lang: str = "fr"):
+    """Compute the frequency of terms in glossary on a given corpus"""
     with open(glossary,"rt") as file:
         glossary = json.load(file)    
     terms = set(item[lang]["text"].lower().strip() for item in glossary)

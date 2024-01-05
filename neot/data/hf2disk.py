@@ -8,6 +8,7 @@ import datasets
 
 
 def main(output: str, names: List[str] = None, cache_dir: str = None):
+    """Save all datasets in names in the specified output directory"""
     output = Path(output)
     output.mkdir(exist_ok=True)
     for name in names:
