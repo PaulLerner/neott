@@ -160,7 +160,7 @@ cython_debug/
 #.idea/
 
 # local data
-data/
+/data/
 drafts/
 
 # ipython
