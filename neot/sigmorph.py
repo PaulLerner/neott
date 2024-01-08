@@ -10,7 +10,8 @@ import pandas as pd
 from .morph import Term, Inflected, Prefixed, Suffixed, Converted, Compound, Syntagmatic
 
 
-def get_morph_table(lang="eng"):
+def get_morph_table(lang="en"):
+    lang = {"en": "eng", "fr": "fra"}[lang]
     # load and preprocess sigmorphon
     train=pd.read_csv(f"/home/lerner/open/2022SegmentationST/data/{lang}.word.train.tsv","\t",names=["word","morpheme","process"],dtype=str)
     dev = pd.read_csv(f"/home/lerner/open/2022SegmentationST/data/{lang}.word.dev.tsv","\t",names=["word","morpheme","process"],dtype=str)
@@ -38,17 +39,17 @@ def get_morph_table(lang="eng"):
     return per_target, prefixes, suffixes, compounds
 
 
-def maybe_rec_get_morph(morphemes, original_token):
+def maybe_rec_get_morph(morphemes, original_token, *args, **kwargs):
     compound = "".join(morphemes)
     # avoids infinite recursion
     if compound != original_token:
-        compound = get_morph(compound)
+        compound = get_morph(compound, *args, **kwargs)
     else:
         compound = Term(compound)
     return compound
 
 
-def get_morph(token, spacy_pos=None, mwe=None, per_target, prefixes, suffixes, compounds):
+def get_morph(token, spacy_pos=None, mwe=None, per_target=None, prefixes=None, suffixes=None, compounds=None):
     if token not in per_target:
         return Term(term=token, pos=spacy_pos)
     # empirically, there is always a single option
@@ -58,7 +59,7 @@ def get_morph(token, spacy_pos=None, mwe=None, per_target, prefixes, suffixes, c
     # assumes that Inflection is always the right-most process
     if morph.Inflection:
         inflection = morphemes.pop()
-        compound = maybe_rec_get_morph(morphemes, token)
+        compound = maybe_rec_get_morph(morphemes, token, per_target=per_target, prefixes=prefixes, suffixes=suffixes, compounds=compounds)
         term = Inflected(term=token, inflection=inflection, stem=compound)
     # before derivation
     # TODO a lot of Neoclassical are tagged Derivation
@@ -68,18 +69,18 @@ def get_morph(token, spacy_pos=None, mwe=None, per_target, prefixes, suffixes, c
         # the prefix is more frequent than the suffix OR (both equal or UNK but prefix shorther than suffix)
         if (p_freq > s_freq) or ((p_freq == s_freq) and (len(morphemes[0]) < len(morphemes[-1]))):
             prefix = morphemes.pop(0)
-            compound = maybe_rec_get_morph(morphemes, token)
+            compound = maybe_rec_get_morph(morphemes, token, per_target=per_target, prefixes=prefixes, suffixes=suffixes, compounds=compounds)
             term = Prefixed(term=token, prefix=prefix, stem=compound, pos=spacy_pos)
         else:
             suffix = morphemes.pop()
-            compound = maybe_rec_get_morph(morphemes, token)
+            compound = maybe_rec_get_morph(morphemes, token, per_target=per_target, prefixes=prefixes, suffixes=suffixes, compounds=compounds)
             term = Suffixed(term=token, suffix=suffix, stem=compound, pos=spacy_pos)
     # and before Compounding (last process before root)
     elif morph.Compound:
         if len(morphemes) > 2:
             # assumes right-headed compound (English and Neoclassical)
             l = Term(morphemes.pop(0))
-            r = maybe_rec_get_morph(morphemes, token)
+            r = maybe_rec_get_morph(morphemes, token, per_target=per_target, prefixes=prefixes, suffixes=suffixes, compounds=compounds)
         else:
             l, r = morphemes
             l, r = Term(l), Term(r)
@@ -92,29 +93,30 @@ def get_morph(token, spacy_pos=None, mwe=None, per_target, prefixes, suffixes, c
     return term
 
 
-def parse_data(data, per_target, **kwargs):
+def parse_data(data, per_target, lang="en", **kwargs):
     for item in data:
-        en = item["en"]["text"].lower().strip()
+        en = item[lang]["text"].lower().strip()
         if en in per_target:   
-            terms = get_morph(en, item["en"]["pos"][0], False, **kwargs)
+            terms = get_morph(en, item[lang]["pos"][0], False, per_target=per_target, **kwargs)
         else:
             terms = []
             mwe = len(item["en"]["tokens"]) > 1
-            for token, pos in zip(item["en"]["tokens"], item["en"]["pos"]):
+            for token, pos in zip(item[lang]["tokens"], item[lang]["pos"]):
                 token = token.lower().strip()
-                terms.append(get_morph(token, pos, mwe, **kwargs))
+                terms.append(get_morph(token, pos, mwe, per_target=per_target, **kwargs))
             terms = Syntagmatic(terms)
-        item["en"]["morph"]=terms
+        item[lang]["morph"]=terms
     
     
 if __name__ == "__main__":
     with open("../data/FranceTerme_triples.json","rt") as file:
         data = json.load(file)
-    per_target, prefixes, suffixes, compounds = get_morph_table()
-    parse_data(data, per_target, prefixes, suffixes, compounds)
+    lang="en"
+    per_target, prefixes, suffixes, compounds = get_morph_table(lang=lang)
+    parse_data(data, per_target=per_target, prefixes=prefixes, suffixes=suffixes, compounds=compounds, lang=lang)
     # TODO save data
     
     random.shuffle(data)
     for item in data[:50]:
-        morph = item["en"]["morph"]
+        morph = item[lang]["morph"]
         print(morph, morph.signature())
