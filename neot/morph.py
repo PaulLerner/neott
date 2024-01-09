@@ -3,9 +3,10 @@ from typing import List
 
 
 class Term:    
-    def __init__(self, term: str, pos=None):
+    def __init__(self, term: str, pos: str = None, trust: float = None):
         self.term = term
         self.pos = pos
+        self.trust = trust
     
     def __str__(self):
         return self.term
@@ -28,8 +29,11 @@ class Term:
         return d
     
     @classmethod
-    def from_dict(cls, *args, **kwargs):
-        return cls(*args, **kwargs)    
+    def from_dict(cls, _class, *args, **kwargs):
+        if _class in SUBCLASSES:
+            return SUBCLASSES[_class].from_dict(*args, **kwargs)
+        else:
+            return cls(*args, **kwargs)    
     
     
 class Inflected(Term):
@@ -50,8 +54,7 @@ class Inflected(Term):
     
     @classmethod
     def from_dict(cls, stem: dict, *args, **kwargs):
-        Class = CLASSES[stem.pop("_class")]
-        stem = Class(**stem)
+        stem = Term.from_dict(**stem)
         return cls(*args, stem=stem, **kwargs)
     
 
@@ -72,8 +75,7 @@ class Prefixed(Term):
     
     @classmethod
     def from_dict(cls, stem: dict, *args, **kwargs):
-        Class = CLASSES[stem.pop("_class")]
-        stem = Class(**stem)
+        stem = Term.from_dict(**stem)
         return cls(*args, stem=stem, **kwargs)
         
         
@@ -94,8 +96,7 @@ class Suffixed(Term):
     
     @classmethod
     def from_dict(cls, stem: dict, *args, **kwargs):
-        Class = CLASSES[stem.pop("_class")]
-        stem = Class(**stem)
+        stem = Term.from_dict(**stem)
         return cls(*args, stem=stem, **kwargs)
     
 
@@ -114,8 +115,7 @@ class Converted(Term):
     
     @classmethod
     def from_dict(cls, stem: dict, *args, **kwargs):
-        Class = CLASSES[stem.pop("_class")]
-        stem = Class(**stem)
+        stem = Term.from_dict(**stem)
         return cls(*args, stem=stem, **kwargs)
     
         
@@ -136,10 +136,8 @@ class Compound(Term):
     
     @classmethod
     def from_dict(cls, stem_l: dict, stem_r: dict, *args, **kwargs):
-        L = CLASSES[stem_l.pop("_class")]
-        stem_l = L(**stem_l)
-        R = CLASSES[stem_r.pop("_class")]
-        stem_r = R(**stem_r)
+        stem_l = Term.from_dict(**stem_l)
+        stem_r = Term.from_dict(**stem_r)
         return cls(*args, stem_l=stem_l, stem_r=stem_r, **kwargs)
 
 
@@ -153,15 +151,13 @@ class Native(Compound):
         return f"[N{self.stem_l}.signature(){self.stem_r}.signature()]" 
 
 
-CLASSES = {Term.__name__: Term} | {c.__name__: c for c in Term.__subclasses__()}
-
-
-class Syntagmatic:
-    def __init__(self, terms: List[Term]):
+class Syntagm(Term):
+    def __init__(self, terms: List[Term], *args, **kwargs):
         self.terms = terms
+        super().__init__(*args, **kwargs)
         
     def __str__(self):
-        return " ".join(t.__str__() for t in self.terms)
+        return " ".join(str(t) for t in self.terms)
     
     def signature(self):
         return f"[T{''.join(t.signature() for t in self.terms)}]" 
@@ -171,24 +167,26 @@ class Syntagmatic:
     
     def __iter__(self):
         return iter(self.terms)
-    
-    def __repr__(self):
-        return self.__str__()
-    
+        
     def __getitem__(self, i):
         return self.terms[i]
     
     def to_dict(self):
-        return {"terms": [t.to_dict() for t in self.terms]}
+        d = super().to_dict()
+        d["terms"] = [t.to_dict() for t in self.terms]
+        return d
         
     @classmethod
     def from_dict(cls, terms: List[dict], *args, **kwargs):
         _terms = []
         for term in terms:
-            Class = CLASSES[term.pop("_class")]
-            _terms.append(Class.from_dict(**term))
+            _terms.append(Term.from_dict(**term))
         return cls(_terms, *args, **kwargs)
         
+    
+SUBCLASSES = {c.__name__: c for c in Term.__subclasses__()}
+CLASSES = {Term.__name__: Term} | SUBCLASSES
+
     
 if __name__ == "__main__":
     ps = Suffixed(
