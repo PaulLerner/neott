@@ -14,6 +14,9 @@ class Term:
     def __repr__(self):
         return self.__str__()
     
+    def labels(self):
+        return set()
+    
     def signature(self):
         return "[M]"
     
@@ -45,6 +48,9 @@ class Inflected(Term):
     def __str__(self):
         return f"{self.stem}-{self.inflection}"
     
+    def labels(self):
+        return self.stem.labels()
+    
     def signature(self):
         # discount inflections
         return self.stem.signature()
@@ -67,6 +73,9 @@ class Prefixed(Term):
     def __str__(self):
         return f"{self.prefix}-{self.stem}"
     
+    def labels(self):
+        return {self.__class__.__name__} | self.stem.labels()
+    
     def signature(self):
         return f"[P{self.stem.signature()}]"
     
@@ -88,6 +97,9 @@ class Suffixed(Term):
     def __str__(self):
         return f"{self.stem}-{self.suffix}"
     
+    def labels(self):
+        return {self.__class__.__name__} | self.stem.labels()
+    
     def signature(self):
         return f"[S{self.stem.signature()}]"
     
@@ -107,6 +119,9 @@ class Converted(Term):
         # self.term == self.stem.term
         # self.pos != self.stem.pos
         
+    def labels(self):
+        return {self.__class__.__name__} | self.stem.labels()
+    
     def signature(self):
         return f"[0{self.stem.signature()}]" 
     
@@ -124,13 +139,13 @@ class Compound(Term):
         self.stem_l = stem_l
         self.stem_r = stem_r
         super().__init__(*args, **kwargs)
-        
+            
+    def labels(self):
+        return {self.__class__.__name__} | self.stem_l.labels() | self.stem_r.labels() 
+    
     def __str__(self):
         return f"{self.stem_l}|{self.stem_r}"
-    
-    def signature(self):
-        return f"[{self.stem_l.signature()}{self.stem_r.signature()}]" 
-    
+        
     def __len__(self):
         return len(self.stem_l) + len(self.stem_r)
     
@@ -141,23 +156,27 @@ class Compound(Term):
         return cls(*args, stem_l=stem_l, stem_r=stem_r, **kwargs)
 
 
-class Neoclassical(Compound):
+class Neoclassical(Compound):   
     def signature(self):
-        return f"[C{self.stem_l}.signature(){self.stem_r}.signature()]" 
+        return f"[C{self.stem_l.signature()}{self.stem_r.signature()}]" 
 
 
 class Native(Compound):
     def signature(self):
-        return f"[N{self.stem_l}.signature(){self.stem_r}.signature()]" 
+        return f"[N{self.stem_l.signature()}{self.stem_r.signature()}]" 
 
 
 class Syntagm(Term):
     def __init__(self, terms: List[Term], *args, **kwargs):
         self.terms = terms
-        super().__init__(*args, **kwargs)
+        trust = sum(t.trust for t in terms)/len(terms)
+        super().__init__(*args, trust=trust, **kwargs)
         
     def __str__(self):
         return " ".join(str(t) for t in self.terms)
+    
+    def labels(self):
+        return {self.__class__.__name__} | {l for t in self.terms for l in t.labels()}
     
     def signature(self):
         return f"[T{''.join(t.signature() for t in self.terms)}]" 
@@ -185,7 +204,6 @@ class Syntagm(Term):
         
     
 SUBCLASSES = {c.__name__: c for c in Term.__subclasses__()}
-CLASSES = {Term.__name__: Term} | SUBCLASSES
 
     
 if __name__ == "__main__":
