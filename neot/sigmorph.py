@@ -1,16 +1,15 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-import random
 import json
 from collections import Counter
 import enum
 
-import numpy as np
 import pandas as pd
 import seaborn as sns
 
 from .morph import Term, Inflected, Prefixed, Suffixed, Converted, Native, Neoclassical, Syntagm
+from .utils import random_data
 
 
 class MorphyType(enum.Enum):
@@ -159,24 +158,27 @@ def parse_data(data, per_target, lang="en", **kwargs):
         item[lang]["morph"] = term
     
 
-def save(data, lang="en"):    
+def save(data):    
     for item in data:
-        item[lang]["morph"] = item[lang]["morph"].to_dict()
+        item["en"]["morph"] = item["en"]["morph"].to_dict()
+        item["fr"]["morph"] = item["fr"]["morph"].to_dict()
         
     with open("data/FranceTerme_triples.json", "wt") as file:
         json.dump(data, file)
         
         
-def viz(data, lang="en"):
+def viz_mono(data, lang="en"):
     tuples=Counter()
     trusts_terms = Counter()
     trusts_morphs = Counter()
+    signatures = Counter()
     morphemes_l = []
     for item in data:
         morph = item[lang]["morph"]
         trusts_terms[morph.trust > 0.0] += 1
         if morph.trust <= 0.0:
             continue
+        signatures[morph.signature()] += 1
         labels = morph.labels()
         tuples[tuple(sorted(labels))]+=1
         morphemes_l.append({"length":len(morph), "unit":"morpheme"})
@@ -186,26 +188,66 @@ def viz(data, lang="en"):
         for m in morph:
             trusts_morphs[m.trust > 0.0]+=1
         
+    print(lang)
     print(f"{trusts_terms=} {trusts_terms[True]/sum(trusts_terms.values()):.1%}")
-    print(f"{trusts_morphs=} {trusts_morphs[True]/sum(trusts_morphs.values()):.1%}")    
+    print(f"{trusts_morphs=} {trusts_morphs[True]/sum(trusts_morphs.values()):.1%}")  
+    
+    print(f"\n{len(signatures)=}\n{pd.DataFrame(signatures.most_common(100)).to_latex(index=False)}")
+    
+    print(f"\n{len(tuples)=}")
     print(pd.DataFrame(tuples.most_common()).to_latex(index=False))
     
     morphemes_l = pd.DataFrame(morphemes_l)
     fig = sns.displot(morphemes_l,x="length", hue="unit",discrete=True)
     fig.savefig(f"viz/FranceTerme_{lang}_morph_sig.pdf")
     
-    indices = np.arange(len(data))
-    np.random.shuffle(indices)
-    for i in indices[:50]:
-        morph = data[i][lang]["morph"]
+    print()
+    for item in random_data(data, 50):
+        morph = item[lang]["morph"]
         print(morph, morph.signature())
 
 
+def viz_bi(data):    
+    tuples=Counter()
+    trusts_terms = Counter()
+    signatures = Counter()
+    for item in data:
+        if not (item["en"]["morph"].trust > 0.0 and item["fr"]["morph"].trust > 0.0):
+            trusts_terms[False] += 1
+            continue
+        trusts_terms[True] += 1
+        signatures[f'{item["en"]["morph"].signature()}={item["fr"]["morph"].signature()}'] += 1
+        en_labels = " ".join(sorted(item["en"]["morph"].labels()))
+        fr_labels = " ".join(sorted(item["fr"]["morph"].labels()))
+        tuples[f"{en_labels}={fr_labels}"]+=1
+    print("\nEN-FR")
+    print(f"{trusts_terms=} {trusts_terms[True]/sum(trusts_terms.values()):.1%}")
+    
+    print(f"{len(signatures)=}")
+    print(f"{len(tuples)=}\n")
+    
+    r_data = list(random_data(data))
+    for signature, c in signatures.most_common(100):
+        for item in r_data:
+            if f'{item["en"]["morph"].signature()}={item["fr"]["morph"].signature()}' == signature:
+                print(f'{item["en"]["morph"].signature()} & {item["fr"]["morph"].signature()} & {c} & {item["en"]["text"]} & {item["fr"]["text"]}')
+                break
+    print()
+    for label_tuple, c in tuples.most_common(100):
+        for item in r_data:
+            en_labels = " ".join(sorted(item["en"]["morph"].labels()))
+            fr_labels = " ".join(sorted(item["fr"]["morph"].labels()))
+            if f"{en_labels}={fr_labels}" == label_tuple:
+                print(f'{en_labels} & {fr_labels} & {c} & {item["en"]["text"]} & {item["fr"]["text"]}')
+                break
+                
+        
 if __name__ == "__main__":
     with open("data/FranceTerme_triples.json","rt") as file:
         data = json.load(file)
-    lang="fr"
-    per_target, prefixes, suffixes = get_morph_table(lang=lang)
-    parse_data(data, per_target=per_target, prefixes=prefixes, suffixes=suffixes, lang=lang)
-    viz(data, lang)
-    save(data, lang)
+    for lang in ["en", "fr"]:
+        per_target, prefixes, suffixes = get_morph_table(lang=lang)
+        parse_data(data, per_target=per_target, prefixes=prefixes, suffixes=suffixes, lang=lang)
+        viz_mono(data, lang)
+    viz_bi(data)
+    save(data)
