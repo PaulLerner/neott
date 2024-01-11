@@ -4,12 +4,14 @@
 import json
 from collections import Counter
 import enum
+from jsonargparse import CLI
+from tqdm import tqdm
 
 import pandas as pd
 import seaborn as sns
 
 from .morph import Term, Inflected, Prefixed, Suffixed, Converted, Native, Neoclassical, Syntagm
-from .utils import random_data
+from .utils import random_data, Path
 
 
 class MorphyType(enum.Enum):
@@ -17,8 +19,8 @@ class MorphyType(enum.Enum):
     suffix = 1
     
     
-def get_morphy_table(lang="eng"):
-    table=pd.read_csv(f"/home/lerner/open/MorphyNet/{lang}/{lang}.derivational.v1.tsv","\t",names=["source word","target word","source POS","target POS","morpheme","type"])
+def get_morphy_table(root_path, lang="eng"):
+    table=pd.read_csv(root_path/f"{lang}/{lang}.derivational.v1.tsv",delimiter="\t",names=["source word","target word","source POS","target POS","morpheme","type"])
 
     morphy_affixes = {}
     for t, subset in table.groupby("type"):
@@ -30,12 +32,12 @@ def get_morphy_table(lang="eng"):
     return morphy_prefixes, morphy_suffixes
 
 
-def get_morph_table(lang="en"):
+def get_morph_table(root_path, morphy_root_path, lang="en"):
     lang = {"en": "eng", "fr": "fra"}[lang]
     # load and preprocess sigmorphon
-    train=pd.read_csv(f"/home/lerner/open/2022SegmentationST/data/{lang}.word.train.tsv","\t",names=["word","morpheme","process"],dtype=str)
-    dev = pd.read_csv(f"/home/lerner/open/2022SegmentationST/data/{lang}.word.dev.tsv","\t",names=["word","morpheme","process"],dtype=str)
-    test=pd.read_csv(f"/home/lerner/open/2022SegmentationST/data/{lang}.word.test.gold.tsv","\t",names=["word","morpheme","process"],dtype=str)
+    train=pd.read_csv(root_path/f"{lang}.word.train.tsv",delimiter="\t",names=["word","morpheme","process"],dtype=str)
+    dev = pd.read_csv(root_path/f"{lang}.word.dev.tsv",delimiter="\t",names=["word","morpheme","process"],dtype=str)
+    test=pd.read_csv(root_path/f"{lang}.word.test.gold.tsv",delimiter="\t",names=["word","morpheme","process"],dtype=str)
     table = pd.concat((train,dev,test))
     
     process=[[],[],[]]
@@ -46,10 +48,10 @@ def get_morph_table(lang="en"):
         table[k] = process[i]
     
     per_target = {}
-    for target, sources in table.groupby("word"):
+    for target, sources in tqdm(table.groupby("word"), desc="Building morph"):
         per_target[target.lower().strip()]=sources
         
-    prefixes, suffixes = get_morphy_table(lang)
+    prefixes, suffixes = get_morphy_table(morphy_root_path, lang)
 
     return per_target, prefixes, suffixes
 
@@ -141,16 +143,18 @@ def get_morph(token, pos=None, per_target=None, prefixes=None, suffixes=None, me
 
 
 def parse_data(data, per_target, lang="en", **kwargs):
-    for item in data:
+    for item in tqdm(data, desc="Morph parsing"):
         term = item[lang]["text"].lower().strip()
         # init memory to avoid infinite recursion
         memory = set()
         # prioritize morph tokenization over spacy's tokenization (equivalent for single-token terms)
         if term in per_target: 
-            term = get_morph(term, item[lang]["pos"][0], per_target=per_target, memory=memory, **kwargs)
+            pos = item[lang].get("pos", [None])[0]
+            term = get_morph(term, pos, per_target=per_target, memory=memory, **kwargs)
         else:
             tokens = []
-            for token, pos in zip(item[lang]["tokens"], item[lang]["pos"]):
+            for i, token in enumerate(item[lang]["tokens"]):
+                pos = item[lang]["pos"][i] if "pos" in item[lang] else None
                 token = token.lower().strip()
                 tokens.append(get_morph(token, pos, per_target=per_target, memory=memory, **kwargs))
             term = Syntagm(terms=tokens, term=item[lang]["text"])
@@ -158,16 +162,16 @@ def parse_data(data, per_target, lang="en", **kwargs):
         item[lang]["morph"] = term
     
 
-def save(data):    
+def save(data, data_path):    
     for item in data:
         item["en"]["morph"] = item["en"]["morph"].to_dict()
         item["fr"]["morph"] = item["fr"]["morph"].to_dict()
         
-    with open("data/FranceTerme_triples.json", "wt") as file:
+    with open(data_path, "wt") as file:
         json.dump(data, file)
         
         
-def viz_mono(data, lang="en"):
+def viz_mono(data, lang, viz_path):
     tuples=Counter()
     trusts_terms = Counter()
     trusts_morphs = Counter()
@@ -199,7 +203,7 @@ def viz_mono(data, lang="en"):
     
     morphemes_l = pd.DataFrame(morphemes_l)
     fig = sns.displot(morphemes_l,x="length", hue="unit",discrete=True)
-    fig.savefig(f"viz/FranceTerme_{lang}_morph_sig.pdf")
+    fig.savefig(viz_path/f"{lang}_morph_sig.pdf")
     
     print()
     for item in random_data(data, 50):
@@ -242,12 +246,17 @@ def viz_bi(data):
                 break
                 
         
-if __name__ == "__main__":
-    with open("data/FranceTerme_triples.json","rt") as file:
+def main(data_path: Path, sigmorphon: Path, morphynet: Path, viz_path: Path):
+    viz_path.mkdir(exist_ok=True)
+    with open(data_path, "rt") as file:
         data = json.load(file)
     for lang in ["en", "fr"]:
-        per_target, prefixes, suffixes = get_morph_table(lang=lang)
+        per_target, prefixes, suffixes = get_morph_table(sigmorphon, morphynet, lang=lang)
         parse_data(data, per_target=per_target, prefixes=prefixes, suffixes=suffixes, lang=lang)
-        viz_mono(data, lang)
+        viz_mono(data, lang, viz_path)
     viz_bi(data)
-    save(data)
+    save(data, data_path)
+    
+    
+if __name__ == "__main__":
+    CLI(main)
