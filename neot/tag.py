@@ -4,23 +4,28 @@
 import json
 from collections import Counter
 import random
+from jsonargparse import CLI
+from tqdm import tqdm
 
 import numpy as np
 from scipy.stats import entropy
 
 import spacy
+from spacy.lang.en import English
+from spacy.lang.fr import French
 
 
-def tag(data, en, fr):
-    for item in data:
+def tag(data, en, fr, tagging=True):
+    for item in tqdm(data):
         doc_fr = fr(item["fr"]["text"])
         doc_en = en(item["en"]["text"])
-        item["fr"]["pos"] = [t.pos_ for t in doc_fr]
-        item["en"]["pos"] = [t.pos_ for t in doc_en]
-        item["fr"]["dep"] = [t.dep_ for t in doc_fr]
-        item["en"]["dep"] = [t.dep_ for t in doc_en]
         item["fr"]["tokens"] = [t.text for t in doc_fr]
         item["en"]["tokens"] = [t.text for t in doc_en]
+        if tagging:
+            item["fr"]["pos"] = [t.pos_ for t in doc_fr]
+            item["en"]["pos"] = [t.pos_ for t in doc_en]
+            item["fr"]["dep"] = [t.dep_ for t in doc_fr]
+            item["en"]["dep"] = [t.dep_ for t in doc_en]
 
 
 def viz_dep(data):
@@ -83,16 +88,26 @@ def viz_pos(data):
         print(pos,"&",count,"&",f"{p:.2f} & ",f"{e:.2f} & ", " / " .join([k for k, v in en_poses[pos].most_common(5)]),r"\\")
 
 
-if __name__ == '__main__':
-    with open("data/FranceTerme_triples.json","rt") as file:
+def main(data_path: str, tagging: bool = True):
+    with open(data_path,"rt") as file:
         data = json.load(file)
         
-    en = spacy.load("en_core_web_sm")
-    fr = spacy.load("fr_core_news_sm")
+    if tagging:
+        disable = ["lemmatizer", "ner"]
+        en = spacy.load("en_core_web_sm", disable=disable)
+        fr = spacy.load("fr_core_news_sm", disable=disable)
+    else:
+        en = English()
+        fr = French()
     
     tag(data, en, fr)
-    with open("data/FranceTerme_triples.json","wt") as file:
+    with open(data_path, "wt") as file:
         json.dump(data,file)
         
-    viz_dep(data)
-    viz_pos(data)
+    if tagging:
+        viz_dep(data)
+        viz_pos(data)
+    
+
+if __name__ == "__main__":
+    CLI(main)
