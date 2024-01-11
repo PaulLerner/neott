@@ -14,7 +14,7 @@ def get_data():
     for path in root.rglob("*.csv"):
         print(path)
         domain = path.parent.name.split("-")[1]
-        table = pd.read_csv(path)
+        table = pd.read_csv(path).dropna(subset=["TERM_EN", "TERME_FR"])
         for i, row in table.iterrows():
             term = {
                 "id": f"{path.name}_{i}",
@@ -32,6 +32,8 @@ def get_data():
                 }
             }
             data.append(term)
+            
+    print(len(data))
     
     return data
 

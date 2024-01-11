@@ -12,7 +12,7 @@ RELIABILITY = {'Reliable': 3,
 
 
 def get_data():
-    data = pd.read_csv("data/IATE_export.csv","|")    
+    data = pd.read_csv("data/IATE_export.csv",delimiter="|")    
     print(data.describe(include="all"))  
     table = []    
     for e_id, terms in data.groupby("E_ID"):
@@ -22,17 +22,29 @@ def get_data():
             syns.setdefault(lang, {})
             syns[lang][lterm.T_TERM.iloc[0]] = RELIABILITY[lterm.T_RELIABILITY.iloc[0]]
             domain.add(lterm.E_DOMAINS.iloc[0])
+            
+        if syns.keys() != {"en","fr"}:
+            continue        
         assert len(domain) == 1
+        
         domain = next(iter(domain))
         term = {}
         term["id"] = e_id
         term["domain"] = domain
+        nan = False
         for lang, lsyn in syns.items():
             term.setdefault(lang, {})
             best = sorted(lsyn, key=lsyn.get, reverse=True)[0]
+            if best != best:
+                nan = True
+                break
             term[lang]["text"] = best
             lsyn.pop(best)
             term[lang]["syn"] = list(lsyn.values())
+            
+        if nan:
+            continue
+        
         table.append(term)
         
     return table
