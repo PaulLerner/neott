@@ -6,8 +6,8 @@ from collections import Counter
 import datasets
 import ahocorasick
 
-    
-def build_automaton(terms):    
+
+def build_automaton(terms):
     automaton = ahocorasick.Automaton()
     for idx, key in enumerate(terms):
         automaton.add_word(key, (idx, key))
@@ -21,10 +21,10 @@ def count(batch, automaton, counter):
         counter[original_value] += 1
 
 
-def main(glossary: str, corpus: str, output:str, lang: str = "fr"):
+def main(glossary: str, corpus: str, output: str, lang: str = "fr"):
     """Compute the frequency of terms in glossary on a given corpus"""
-    with open(glossary,"rt") as file:
-        glossary = json.load(file)    
+    with open(glossary, "rt") as file:
+        glossary = json.load(file)
     terms = set(item[lang]["text"].lower().strip() for item in glossary)
     automaton = build_automaton(terms)
     corpus = datasets.load_from_disk(corpus)
@@ -32,7 +32,7 @@ def main(glossary: str, corpus: str, output:str, lang: str = "fr"):
     corpus.map(count, input_columns="text", batched=True, fn_kwargs=dict(automaton=automaton, counter=counter))
     with open(output, "wt") as file:
         json.dump(counter, file)
-    
-    
+
+
 if __name__ == "__main__":
     CLI(main)

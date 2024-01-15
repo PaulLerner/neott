@@ -9,8 +9,8 @@ import json
 
 def get_data():
     root = Path("data/termium/")
-    data=[]
-    
+    data = []
+
     for path in root.rglob("*.csv"):
         print(path)
         domain = path.parent.name.split("-")[1]
@@ -19,26 +19,30 @@ def get_data():
             term = {
                 "id": f"{path.name}_{i}",
                 "Dom": domain,
-                "S-dom":row.SUBJECT_EN,
+                "S-dom": row.SUBJECT_EN,
                 "en": {
                     "text": row.TERM_EN,
                     "syn": row.SYNONYMS_EN.split(";") if row.SYNONYMS_EN == row.SYNONYMS_EN else None,
-                    "def": row.TEXTUAL_SUPPORT_1_EN[len("DEF:"):].strip() if (row.TEXTUAL_SUPPORT_1_EN==row.TEXTUAL_SUPPORT_1_EN and row.TEXTUAL_SUPPORT_1_EN.startswith("DEF:")) else None
+                    "def": row.TEXTUAL_SUPPORT_1_EN[len("DEF:"):].strip() if (
+                                row.TEXTUAL_SUPPORT_1_EN == row.TEXTUAL_SUPPORT_1_EN and row.TEXTUAL_SUPPORT_1_EN.startswith(
+                            "DEF:")) else None
                 },
                 "fr": {
                     "text": row.TERME_FR,
                     "syn": row.SYNONYMES_FR.split(";") if row.SYNONYMES_FR == row.SYNONYMES_FR else None,
-                    "def": row.JUSTIFICATION_1_FR[len("DEF:"):].strip() if (row.JUSTIFICATION_1_FR==row.JUSTIFICATION_1_FR and row.JUSTIFICATION_1_FR.startswith("DEF:")) else None
+                    "def": row.JUSTIFICATION_1_FR[len("DEF:"):].strip() if (
+                                row.JUSTIFICATION_1_FR == row.JUSTIFICATION_1_FR and row.JUSTIFICATION_1_FR.startswith(
+                            "DEF:")) else None
                 }
             }
             data.append(term)
-            
+
     print(len(data))
-    
+
     return data
 
 
 if __name__ == '__main__':
     data = get_data()
-    with open("data/termium.json","wt") as file:
+    with open("data/termium.json", "wt") as file:
         json.dump(data, file)

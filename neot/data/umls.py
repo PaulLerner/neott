@@ -7,8 +7,7 @@ from jsonargparse import CLI
 
 import pandas as pd
 
-
-COLS="""CUI	Unique identifier for concept
+COLS = """CUI	Unique identifier for concept
 LAT	Language of term
 TS	Term status
 LUI	Unique identifier for term
@@ -27,7 +26,7 @@ SRL	Source restriction level
 SUPPRESS	Suppressible flag. Values = O, E, Y, or N
 CVF	Content View Flag. Bit field used to flag rows included in Content View. This field is a varchar field to maximize the number of bits available for use."""
 
-SOURCES= """AIR 	AI/RHEUM 	1995AA 	ENG 	0
+SOURCES = """AIR 	AI/RHEUM 	1995AA 	ENG 	0
 AOD 	Alcohol and Other Drug Thesaurus 	2002AC 	ENG 	0
 ALT 	Alternative Billing Concepts 	2009AA 	ENG 	3
 ATC 	Anatomical Therapeutic Chemical Classification System 	2023AB 	ENG 	0
@@ -218,43 +217,43 @@ WHOSPA 	WHOART Spanish 	1999AA 	SPA 	2"""
 LANGUAGES = {}
 for source in SOURCES.split("\n"):
     s, _, _, lang, _ = source.split("\t")
-    s,lang = s.strip(), {"ENG":"en", "FRE": "fr"}.get(lang.strip())
+    s, lang = s.strip(), {"ENG": "en", "FRE": "fr"}.get(lang.strip())
     if lang is None:
         continue
     LANGUAGES.setdefault(lang, set())
     LANGUAGES[lang].add(s)
-        
-        
+
+
 def get_glossary(path):
-    names=[c.split("\t")[0].strip() for c in COLS.split("\n")]
-    glossary = pd.read_csv(path,sep="|",names=names,dtype=str,index_col=False)
+    names = [c.split("\t")[0].strip() for c in COLS.split("\n")]
+    glossary = pd.read_csv(path, sep="|", names=names, dtype=str, index_col=False)
     glossary = glossary[glossary["LAT"].isin({'ENG', 'FRE'})]
 
     # only P or S. S seems to be acronyms
     glossary = glossary[glossary["TS"] == "P"]
-    
+
     data = {}
     for _, term in glossary.iterrows():
         concept_id = term.CUI
-        data.setdefault(concept_id, {"id": concept_id, "en":{"syns":[]}, "fr":{"syns":[]}})
-        lang = {"ENG":"en", "FRE":"fr"}[term.LAT]
-        if term.STT=="PF" and term.ISPREF=="Y":
+        data.setdefault(concept_id, {"id": concept_id, "en": {"syns": []}, "fr": {"syns": []}})
+        lang = {"ENG": "en", "FRE": "fr"}[term.LAT]
+        if term.STT == "PF" and term.ISPREF == "Y":
             data[concept_id][lang]["text"] = term.STR
             data[concept_id][lang]["Dom"] = term.SAB
             data[concept_id][lang]["id"] = term.LUI
         else:
-            data[concept_id][lang]["syns"].append({"text":term.STR, "source": term.SAB, "id": term.LUI})
+            data[concept_id][lang]["syns"].append({"text": term.STR, "source": term.SAB, "id": term.LUI})
 
     return data
 
 
 def get_definitions(path, data):
     defs = pd.read_csv(path, sep="|", header=None)
-    
-    defs = defs[defs[4].isin((LANGUAGES["en"]|LANGUAGES["fr"]))]
-    
+
+    defs = defs[defs[4].isin((LANGUAGES["en"] | LANGUAGES["fr"]))]
+
     defs_per_source = Counter(defs[4])
-        
+
     for concept_id, cdefs in defs.groupby(0):
         fr_defs, en_defs, = {}, {}
         for _, cdef in cdefs.iterrows():
@@ -299,7 +298,7 @@ def main(glossary_path: str, definitions_path: str, output: str):
     data = get_definitions(definitions_path, data)
     with open(output, "wt") as file:
         json.dump(data, file)
-    
-    
+
+
 if __name__ == "__main__":
     CLI(main)

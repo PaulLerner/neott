@@ -19,17 +19,18 @@ def fixquote(x):
     x = re.sub('&quot;', '"', x)
     return x.strip()
 
+
 def preproc(x):
     return fixquote(x).lower()
 
 
 def get_steg():
-    data = pd.read_csv("data/STEG/corpora/raw/trads_post-edit_upc/PE_EXPL_280-V2.txt",skiprows=23,sep="\t")
+    data = pd.read_csv("data/STEG/corpora/raw/trads_post-edit_upc/PE_EXPL_280-V2.txt", skiprows=23, sep="\t")
     root = Path("/home/lerner/code/neot/data/STEG/corpora/raw/trads_post-edit_upc/")
-    dfs=[]
+    dfs = []
     for path in root.glob("PE*"):
         try:
-            dfs.append(pd.read_csv(path,skiprows=23,sep="\t"))
+            dfs.append(pd.read_csv(path, skiprows=23, sep="\t"))
         except Exception as e:
             print(e)
     {'en', 'TA (DeepL)', 'fr'} - dfs[0].columns
@@ -39,10 +40,10 @@ def get_steg():
 
 def diffhtml(data):
     spans = []
-    for _,row in data.iterrows():
+    for _, row in data.iterrows():
         # FIXME consistent column naming in get_steg
-        trans = (row["TA (DeepL)"])#.translation)
-        pe = (row.fr)#postedition)
+        trans = (row["TA (DeepL)"])  # .translation)
+        pe = (row.fr)  # postedition)
         trans = preproc(trans)
         pe = preproc(pe)
         if trans == pe:
@@ -53,11 +54,11 @@ def diffhtml(data):
     return spans
 
 
-#data = pd.read_csv("data/TAL/corpora/raw/2023-postedition/postedition_aligned.final.community.tsv",'\t')
-#data = pd.concat((data,pd.read_csv("data/TAL/corpora/raw/2023-postedition/postedition_aligned.final.translator.tsv",'\t')))
+# data = pd.read_csv("data/TAL/corpora/raw/2023-postedition/postedition_aligned.final.community.tsv",'\t')
+# data = pd.concat((data,pd.read_csv("data/TAL/corpora/raw/2023-postedition/postedition_aligned.final.translator.tsv",'\t')))
 data = get_steg()
 
 dmper = diff_match_patch()
 spans = diffhtml(data)
-with open("viz/pe_steg.html","wt") as file:
+with open("viz/pe_steg.html", "wt") as file:
     file.write("\n".join(spans))
