@@ -90,6 +90,7 @@ def viz_pos(data):
 
 
 def main(data_path: str, tagging: bool = True):
+    """POS tag or tokenization"""
     with open(data_path, "rt") as file:
         data = json.load(file)
 

@@ -257,6 +257,7 @@ def viz_bi(data):
 
 
 def main(data_path: Path, sigmorphon: Path, morphynet: Path, viz_path: Path):
+    """Morphological parsing"""
     viz_path.mkdir(exist_ok=True)
     with open(data_path, "rt") as file:
         data = json.load(file)
