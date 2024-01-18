@@ -14,3 +14,11 @@ def random_data(data, n=None):
     np.random.shuffle(indices)
     for i in indices[:n]:
         yield data[i]
+
+
+def infinite_random_data(data):
+    indices = np.arange(len(data))
+    while True:
+        np.random.shuffle(indices)
+        for i in indices:
+            yield data[i]
