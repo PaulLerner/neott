@@ -1,14 +1,16 @@
 import os
-from typing import Optional, Union, Dict
+from typing import Optional, Union, List
 from jsonargparse import CLI
 import json
 from dataclasses import dataclass, asdict
+from tqdm import tqdm
 
 import numpy as np
 from torch.utils.data import DataLoader
 from transformers import AutoModelForCausalLM, PretrainedConfig, AutoTokenizer
 
 from .utils import infinite_random_data
+from .metrics import compute_metrics
 
 PROMPTS = {
     "en": {
@@ -22,8 +24,8 @@ PROMPTS = {
     "fr": {
         # PL
         "term": "Le terme {src_lang} {src_term} peut se traduire en {tgt_lang} par {tgt_term}",
-        # PL
         "def": "{src_def} définit le terme {tgt_term}",
+        "def+term": "{src_def} définit le terme {src_lang} {src_term} qui peut se traduire en {tgt_lang} par {tgt_term}",
         # bloomz (instruction)
         "tatoeba_mt": "Traduis le terme {src_lang} suivant en {tgt_lang} {src_term} {tgt_term}"
     }
@@ -81,13 +83,14 @@ class GenKwargs:
     max_new_tokens: int = 64
 
 
-def fill_template(item, template, icl=False, src="en", tgt="fr", src_lang="anglais", tgt_lang="français"):
+def fill_template(item, template, icl=False, src="en", tgt="fr", src_lang="anglais", tgt_lang="français",
+                  def_lang: str = "fr"):
     if icl:
         tgt_term = item[tgt]["text"]
     else:
         tgt_term = ""
     return template.format(tgt_term=tgt_term, src_lang=src_lang, tgt_lang=tgt_lang, src_term=item[src]["text"],
-                           src_def=item[src]["def"]["text"])
+                           src_def=item[def_lang]["def"]["text"])
 
 
 def icl(eval_set, icl_set, n_icl: int = 5, seed: int = 0, **kwargs):
@@ -114,8 +117,22 @@ def icl(eval_set, icl_set, n_icl: int = 5, seed: int = 0, **kwargs):
         item["input_text"] = " ### ".join(icl_eg)
 
 
+def post_proc(predictions):
+    proc_predictions = []
+    for pred in predictions:
+        # FIXME: this could be done upstream by feeding eos_token_id to generate but comes with a lot of caveats
+        # the "###" separating the ICL examples serves as EOS signal (in case the model does extra generation)
+        i = pred.find("###")
+        if i < 0:
+            proc_predictions.append(pred)
+        else:
+            proc_predictions.append(pred[:i])
+    return proc_predictions
+
+
 def evaluate(eval_set, model, tokenizer, gen_kwargs):
-    for inputs in eval_set:
+    predictions, targets = [], []
+    for inputs in tqdm(eval_set):
         batch_size, seq_len = inputs["input_ids"].shape
         target_text = inputs.pop("target_text")
         # TODO top-K hypothesis
@@ -126,10 +143,11 @@ def evaluate(eval_set, model, tokenizer, gen_kwargs):
         else:
             raise NotImplementedError("")
         output_text = tokenizer.batch_decode(output)
-        # TODO eval
-        for o, t in zip(output_text, target_text):
-            print(o, "&", t)
-        break
+        predictions.extend(output_text)
+        targets.extend(target_text)
+    predictions = post_proc(predictions)
+    metrics = compute_metrics(predictions, targets)
+    return {"metrics": metrics, "predictions": predictions}
 
 
 class DataCollator:
@@ -148,11 +166,11 @@ class DataCollator:
 
 
 def prompt(data_path: str, seed: int = 0, eval_set: str = "dev", icl_set: str = "train", src: str = "en",
-           tgt: str = "fr", n_icl: int = 5, template_lang: str = "fr", template_form: str = "term",
-           model_kwargs: ModelKwargs = ModelKwargs(), data_kwargs: DataKwargs = DataKwargs(),
-           tokenizer_name: str = None,
+           tgt: str = "fr", n_icl: int = 5, template_lang: str = "fr", def_lang: str = "fr",
+           template_form: str = "term", model_kwargs: ModelKwargs = ModelKwargs(),
+           data_kwargs: DataKwargs = DataKwargs(), tokenizer_name: str = None,
            tokenizer_kwargs: TokenizerKwargs = TokenizerKwargs(), device: str = "cuda",
-           gen_kwargs: GenKwargs = GenKwargs()):
+           gen_kwargs: GenKwargs = GenKwargs(), output_path: str = None):
     """Prompt LLMs to generate terms (by translating them and/or given their definition)"""
     with open(data_path, 'rt') as file:
         data = json.load(file)
@@ -163,14 +181,20 @@ def prompt(data_path: str, seed: int = 0, eval_set: str = "dev", icl_set: str = 
     tgt_lang = LANGUAGES[template_lang][tgt]
     template = PROMPTS[template_lang][template_form]
     icl(eval_set, icl_set, n_icl=n_icl, seed=seed, src_lang=src_lang, tgt_lang=tgt_lang, template=template, src=src,
-        tgt=tgt)
+        tgt=tgt, def_lang=def_lang)
 
     model = AutoModelForCausalLM.from_pretrained(**asdict(model_kwargs))
     model = model.to(device)
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
     data_collator = DataCollator(tokenizer, device=device, tgt=tgt, **asdict(tokenizer_kwargs))
     eval_set = DataLoader(eval_set, collate_fn=data_collator.collate_fn, **asdict(data_kwargs))
-    evaluate(eval_set, model, tokenizer, gen_kwargs=asdict(gen_kwargs))
+    output = evaluate(eval_set, model, tokenizer, gen_kwargs=asdict(gen_kwargs))
+    for k, v in output["metrics"].items():
+        if isinstance(v, float):
+            print(f"{k}: {v:.1%}")
+    if output_path is not None:
+        with open(output_path, 'wt') as file:
+            json.dump(output, file)
 
 
 if __name__ == "__main__":
