@@ -49,7 +49,7 @@ def get_data(tree):
             "S-dom": sousdoms,
             "fr": {
                 "text": fr_term,
-                "def": def_fr,
+                "def": {"text": def_fr},
                 "syn": fr_terms
             },
             "en": {
