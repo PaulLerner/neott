@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from transformers import AutoModelForCausalLM, PretrainedConfig, AutoTokenizer
 
 from .utils import infinite_random_data
-from .metrics import compute_metrics
+from .metrics import compute_metrics, Preprocessor
 
 PROMPTS = {
     "en": {
@@ -130,7 +130,7 @@ def post_proc(predictions):
     return proc_predictions
 
 
-def evaluate(eval_set, model, tokenizer, gen_kwargs):
+def evaluate(eval_set, model, tokenizer, gen_kwargs, preproc):
     predictions, targets = [], []
     for inputs in tqdm(eval_set):
         batch_size, seq_len = inputs["input_ids"].shape
@@ -146,7 +146,7 @@ def evaluate(eval_set, model, tokenizer, gen_kwargs):
         predictions.extend(output_text)
         targets.extend(target_text)
     predictions = post_proc(predictions)
-    metrics = compute_metrics(predictions, targets)
+    metrics = compute_metrics(predictions, targets, preproc)
     return {"metrics": metrics, "predictions": predictions}
 
 
@@ -177,6 +177,7 @@ def prompt(data_path: str, seed: int = 0, eval_set: str = "dev", icl_set: str = 
     eval_set = data[eval_set]
     icl_set = data[icl_set]
 
+    preproc = Preprocessor(tgt)
     src_lang = LANGUAGES[template_lang][src]
     tgt_lang = LANGUAGES[template_lang][tgt]
     template = PROMPTS[template_lang][template_form]
@@ -188,7 +189,7 @@ def prompt(data_path: str, seed: int = 0, eval_set: str = "dev", icl_set: str = 
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
     data_collator = DataCollator(tokenizer, device=device, tgt=tgt, **asdict(tokenizer_kwargs))
     eval_set = DataLoader(eval_set, collate_fn=data_collator.collate_fn, **asdict(data_kwargs))
-    output = evaluate(eval_set, model, tokenizer, gen_kwargs=asdict(gen_kwargs))
+    output = evaluate(eval_set, model, tokenizer, gen_kwargs=asdict(gen_kwargs), preproc=preproc)
     for k, v in output["metrics"].items():
         if isinstance(v, float):
             print(f"{k}: {v:.1%}")
