@@ -1,5 +1,5 @@
 import os
-from typing import Optional, Union, List
+from typing import Optional, Union
 from jsonargparse import CLI
 import json
 from dataclasses import dataclass, asdict
@@ -15,19 +15,19 @@ from .metrics import compute_metrics, Preprocessor
 PROMPTS = {
     "en": {
         # bawden and yvon
-        "version": "If the original version says {src_term} then the {tgt_lang} version should say: {tgt_term}",
+        "version": "If the original version says {src_term} then the {tgt_lang} version should say:{tgt_term}",
         # PL
-        "term": "The term {src_term} can be translated in {tgt_lang} as {tgt_term}",
+        "term": "The term {src_term} can be translated in {tgt_lang} as:{tgt_term}",
         # bloomz (instruction)
-        "tatoeba_mt": "Translate the following term from {src_lang} to {tgt_lang} {src_term} {tgt_term}"
+        "tatoeba_mt": "Translate the following term from {src_lang} to {tgt_lang} {src_term}:{tgt_term}"
     },
     "fr": {
         # PL
-        "term": "Le terme {src_lang} {src_term} peut se traduire en {tgt_lang} par {tgt_term}",
-        "def": "{src_def} définit le terme {tgt_term}",
-        "def+term": "{src_def} définit le terme {src_lang} {src_term} qui peut se traduire en {tgt_lang} par {tgt_term}",
+        "term": "Le terme {src_lang} {src_term} peut se traduire en {tgt_lang} par:{tgt_term}",
+        "def": "{src_def} définit le terme:{tgt_term}",
+        "def+term": "{src_def} définit le terme {src_lang} {src_term} qui peut se traduire en {tgt_lang} par:{tgt_term}",
         # bloomz (instruction)
-        "tatoeba_mt": "Traduis le terme {src_lang} suivant en {tgt_lang} {src_term} {tgt_term}"
+        "tatoeba_mt": "Traduis le terme {src_lang} suivant en {tgt_lang} {src_term}:{tgt_term}"
     }
 }
 
@@ -40,6 +40,7 @@ LANGUAGES = {
 @dataclass
 class ModelKwargs:
     pretrained_model_name_or_path: Optional[Union[str, os.PathLike]] = None
+    device_map: str = "cuda"
     config: Optional[Union[PretrainedConfig, str, os.PathLike]] = None
     cache_dir: Optional[Union[str, os.PathLike]] = None
     ignore_mismatched_sizes: bool = False
@@ -86,7 +87,7 @@ class GenKwargs:
 def fill_template(item, template, icl=False, src="en", tgt="fr", src_lang="anglais", tgt_lang="français",
                   def_lang: str = "fr"):
     if icl:
-        tgt_term = item[tgt]["text"]
+        tgt_term = " " + item[tgt]["text"]
     else:
         tgt_term = ""
     return template.format(tgt_term=tgt_term, src_lang=src_lang, tgt_lang=tgt_lang, src_term=item[src]["text"],
@@ -130,11 +131,13 @@ def post_proc(predictions):
     return proc_predictions
 
 
-def evaluate(eval_set, model, tokenizer, gen_kwargs, preproc):
+def evaluate(eval_set, model, tokenizer, gen_kwargs, preproc, device="cuda"):
     predictions, targets = [], []
     for inputs in tqdm(eval_set):
         batch_size, seq_len = inputs["input_ids"].shape
         target_text = inputs.pop("target_text")
+        for k, v in inputs.items():
+            inputs[k] = v.to(device)
         # TODO top-K hypothesis
         output = model.generate(**inputs, **gen_kwargs)
         # keep only newly generated tokens
@@ -151,16 +154,13 @@ def evaluate(eval_set, model, tokenizer, gen_kwargs, preproc):
 
 
 class DataCollator:
-    def __init__(self, tokenizer, device="cuda", tgt: str = "fr", **kwargs):
+    def __init__(self, tokenizer, tgt: str = "fr", **kwargs):
         self.tokenizer = tokenizer
-        self.device = device
         self.tgt = tgt
         self.kwargs = kwargs
 
     def collate_fn(self, items):
         inputs = self.tokenizer([item["input_text"] for item in items], **self.kwargs)
-        for k, v in inputs.items():
-            inputs[k] = v.to(self.device)
         inputs["target_text"] = [item[self.tgt]["text"] for item in items]
         return inputs
 
@@ -169,7 +169,7 @@ def prompt(data_path: str, seed: int = 0, eval_set: str = "dev", icl_set: str = 
            tgt: str = "fr", n_icl: int = 5, template_lang: str = "fr", def_lang: str = "fr",
            template_form: str = "term", model_kwargs: ModelKwargs = ModelKwargs(),
            data_kwargs: DataKwargs = DataKwargs(), tokenizer_name: str = None,
-           tokenizer_kwargs: TokenizerKwargs = TokenizerKwargs(), device: str = "cuda",
+           tokenizer_kwargs: TokenizerKwargs = TokenizerKwargs(), add_prefix_space: bool = False,
            gen_kwargs: GenKwargs = GenKwargs(), output_path: str = None):
     """Prompt LLMs to generate terms (by translating them and/or given their definition)"""
     with open(data_path, 'rt') as file:
@@ -185,11 +185,13 @@ def prompt(data_path: str, seed: int = 0, eval_set: str = "dev", icl_set: str = 
         tgt=tgt, def_lang=def_lang)
 
     model = AutoModelForCausalLM.from_pretrained(**asdict(model_kwargs))
-    model = model.to(device)
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
-    data_collator = DataCollator(tokenizer, device=device, tgt=tgt, **asdict(tokenizer_kwargs))
+    if not model_kwargs.load_in_8bit:
+        model = model.to(model_kwargs.device_map)
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, add_prefix_space=add_prefix_space)
+    data_collator = DataCollator(tokenizer, tgt=tgt, **asdict(tokenizer_kwargs))
     eval_set = DataLoader(eval_set, collate_fn=data_collator.collate_fn, **asdict(data_kwargs))
-    output = evaluate(eval_set, model, tokenizer, gen_kwargs=asdict(gen_kwargs), preproc=preproc)
+    output = evaluate(eval_set, model, tokenizer, gen_kwargs=asdict(gen_kwargs), preproc=preproc,
+                      device=model_kwargs.device_map)
     for k, v in output["metrics"].items():
         if isinstance(v, float):
             print(f"{k}: {v:.1%}")
