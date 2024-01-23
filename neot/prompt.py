@@ -1,5 +1,7 @@
 import os
 from typing import Optional, Union
+
+import pandas as pd
 from jsonargparse import CLI
 import json
 from dataclasses import dataclass, asdict
@@ -9,7 +11,7 @@ import numpy as np
 from torch.utils.data import DataLoader
 from transformers import AutoModelForCausalLM, PretrainedConfig, AutoTokenizer
 
-from .utils import infinite_random_data
+from .utils import infinite_random_data, Path
 from .metrics import compute_metrics, Preprocessor
 
 PROMPTS = {
@@ -165,18 +167,21 @@ class DataCollator:
         return inputs
 
 
-def prompt(data_path: str, seed: int = 0, eval_set: str = "dev", icl_set: str = "train", src: str = "en",
-           tgt: str = "fr", n_icl: int = 5, template_lang: str = "fr", def_lang: str = "fr",
-           template_form: str = "term", model_kwargs: ModelKwargs = ModelKwargs(),
-           data_kwargs: DataKwargs = DataKwargs(), tokenizer_name: str = None,
-           tokenizer_kwargs: TokenizerKwargs = TokenizerKwargs(), add_prefix_space: bool = False,
-           gen_kwargs: GenKwargs = GenKwargs(), output_path: str = None):
-    """Prompt LLMs to generate terms (by translating them and/or given their definition)"""
-    with open(data_path, 'rt') as file:
-        data = json.load(file)
-    eval_set = data[eval_set]
-    icl_set = data[icl_set]
+@dataclass
+class PromptKwargs:
+    seed: int = 0
+    src: str = "en"
+    tgt: str = "fr"
+    n_icl: int = 5
+    template_lang: str = "fr"
+    def_lang: str = "fr"
+    template_form: str = "term"
 
+
+def prompt(eval_set, icl_set, model, tokenizer, data_collator, seed: int = 0, src: str = "en", tgt: str = "fr",
+           n_icl: int = 5, template_lang: str = "fr", def_lang: str = "fr", template_form: str = "term", device="cuda",
+           data_kwargs: DataKwargs = DataKwargs(), gen_kwargs: GenKwargs = GenKwargs(), output_path: Path = None):
+    """Prompt LLMs to generate terms (by translating them and/or given their definition)"""
     preproc = Preprocessor(tgt)
     src_lang = LANGUAGES[template_lang][src]
     tgt_lang = LANGUAGES[template_lang][tgt]
@@ -184,21 +189,53 @@ def prompt(data_path: str, seed: int = 0, eval_set: str = "dev", icl_set: str = 
     icl(eval_set, icl_set, n_icl=n_icl, seed=seed, src_lang=src_lang, tgt_lang=tgt_lang, template=template, src=src,
         tgt=tgt, def_lang=def_lang)
 
+    eval_set = DataLoader(eval_set, collate_fn=data_collator.collate_fn, **asdict(data_kwargs))
+    output = evaluate(eval_set, model, tokenizer, gen_kwargs=asdict(gen_kwargs), preproc=preproc,
+                      device=device)
+    metrics = {}
+    for k, v in output["metrics"].items():
+        if isinstance(v, float):
+            metrics[k] = v
+    print(metrics)
+    if output_path is not None:
+        with open(output_path/f"{template_lang}_{template_form}.json", 'wt') as file:
+            json.dump(output, file)
+    return metrics
+
+
+def main(data_path: str, eval_set: str = "dev", icl_set: str = "train", prompt_kwargs: PromptKwargs = PromptKwargs(),
+         model_kwargs: ModelKwargs = ModelKwargs(), data_kwargs: DataKwargs = DataKwargs(), tokenizer_name: str = None,
+         tokenizer_kwargs: TokenizerKwargs = TokenizerKwargs(), add_prefix_space: bool = False,
+         gen_kwargs: GenKwargs = GenKwargs(), output_path: Path = None):
+    """Prompt LLMs to generate terms (by translating them and/or given their definition)"""
+    output_path.mkdir(exist_ok=True)
+    with open(data_path, 'rt') as file:
+        data = json.load(file)
+    eval_set = data[eval_set]
+    icl_set = data[icl_set]
+
     model = AutoModelForCausalLM.from_pretrained(**asdict(model_kwargs))
     if not model_kwargs.load_in_8bit:
         model = model.to(model_kwargs.device_map)
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, add_prefix_space=add_prefix_space)
-    data_collator = DataCollator(tokenizer, tgt=tgt, **asdict(tokenizer_kwargs))
-    eval_set = DataLoader(eval_set, collate_fn=data_collator.collate_fn, **asdict(data_kwargs))
-    output = evaluate(eval_set, model, tokenizer, gen_kwargs=asdict(gen_kwargs), preproc=preproc,
-                      device=model_kwargs.device_map)
-    for k, v in output["metrics"].items():
-        if isinstance(v, float):
-            print(f"{k}: {v:.1%}")
+    data_collator = DataCollator(tokenizer, tgt=prompt_kwargs.tgt, **asdict(tokenizer_kwargs))
+    template_langs = PROMPTS.keys() if prompt_kwargs.template_lang is None else [prompt_kwargs.template_lang]
+    search_templates = prompt_kwargs.template_form is None
+    results = []
+    for template_lang in template_langs:
+        prompt_kwargs.template_lang = template_lang
+        template_forms = PROMPTS[template_lang].keys() if search_templates else [prompt_kwargs.template_form]
+        for template_form in template_forms:
+            prompt_kwargs.template_form = template_form
+            metrics = prompt(eval_set, icl_set, model, tokenizer, data_collator, **asdict(prompt_kwargs),
+                            device=model_kwargs.device_map, data_kwargs=data_kwargs, gen_kwargs=gen_kwargs,
+                            output_path=output_path)
+            metrics.update({"template_lang": template_lang, "template_form": template_form})
+            results.append(metrics)
+    print(results)
     if output_path is not None:
-        with open(output_path, 'wt') as file:
-            json.dump(output, file)
+        pd.DataFrame(results).to_csv(output_path/"results.csv")
 
 
 if __name__ == "__main__":
-    CLI(prompt)
+    CLI(main)
