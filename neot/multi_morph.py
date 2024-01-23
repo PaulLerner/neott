@@ -3,16 +3,18 @@
 
 from collections import Counter
 import pandas as pd
-from pathlib import Path
+from jsonargparse import CLI
+
+from .utils import Path
 
 
-def get_morphy():
-    morphyd = pd.read_csv("/home/paul/open/MorphyNet/fra/fra.derivational.v1.tsv", delimiter="\t",
+def get_morphy(root_path, lang):
+    morphyd = pd.read_csv(root_path / f"{lang}/{lang}.derivational.v1.tsv", delimiter="\t",
                           names=["source word", "target word", "source POS", "target POS", "morpheme", "type"])
-    morphyi = pd.read_csv("/home/paul/open/MorphyNet/fra/fra.inflectional.v1.tsv", delimiter="\t", names=[
-        "source word", "target word",
-        'morphological features',
-        'morpheme segmentation'])
+    morphyi = pd.read_csv(root_path / f"{lang}/{lang}.inflectional.v1.tsv", delimiter="\t",
+                          names=["source word", "target word",
+                                 'morphological features',
+                                 'morpheme segmentation'])
 
     morphy = {}
     for target_word, word in morphyi.groupby("target word"):
@@ -28,9 +30,7 @@ def get_morphy():
     return morphy, morphy_prefixes, morphy_suffixes
 
 
-def get_sigmorphon():
-    root_path = Path("/home/paul/open/2022SegmentationST/data/")
-    lang = "fra"
+def get_sigmorphon(root_path, lang):
     # load and preprocess sigmorphon
     train = pd.read_csv(root_path / f"{lang}.word.train.tsv", delimiter="\t", names=["word", "morpheme", "process"],
                         dtype=str)
@@ -55,11 +55,11 @@ def get_sigmorphon():
     return sigmorph, sigmorph_per_word
 
 
-def morphemes_are_affixes(morphemes):
+def morphemes_are_affixes(morphemes, morphy_prefixes, morphy_suffixes):
     return all(m in morphy_prefixes or m in morphy_suffixes for m in morphemes)
 
 
-def is_neoclassical(word, memory):
+def is_neoclassical(word, memory, sigmorph_per_word, morphy, morphy_prefixes, morphy_suffixes):
     memory.add(word.word)
     morphemes = word.morpheme.split(" @@")
     p_freq = morphy_prefixes.get(morphemes[0], 0)
@@ -83,10 +83,10 @@ def is_neoclassical(word, memory):
     elif word.word in morphy:
         for source in morphy[word.word]["source word"]:
             if source in sigmorph_per_word and source not in memory:
-                source_neo, _, _ = is_neoclassical(sigmorph_per_word[source], memory)
+                source_neo, _, _ = is_neoclassical(sigmorph_per_word[source], memory, sigmorph_per_word, morphy, morphy_prefixes, morphy_suffixes)
                 if source_neo:
                     return True, prefix, suffix
-                elif morphemes_are_affixes(morphemes):
+                elif morphemes_are_affixes(morphemes, morphy_prefixes, morphy_suffixes):
                     return True, False, False
                 # 3 or more morphemes but not neo -> prefix and suffix
                 elif len(morphemes) - int(word.Inflection) > 2:
@@ -95,19 +95,19 @@ def is_neoclassical(word, memory):
                     return False, prefix, suffix
         # did not find source word in sigmorph_per_word
 
-    if morphemes_are_affixes(morphemes):
+    if morphemes_are_affixes(morphemes, morphy_prefixes, morphy_suffixes):
         return True, False, False
 
     return False, prefix, suffix
 
 
-def process_data(sigmorph):
+def process_data(sigmorph, output, verbose: int = 0, **kwargs):
     neoclassicals, prefixes, suffixes = [], [], []
     for _, word in sigmorph.iterrows():
         memory = set()
-        # some neoclassicals are hiddent in derivation
+        # some neoclassicals are hidden in derivation
         if word.Derivation:
-            is_neo, prefix, suffix = is_neoclassical(word, memory)
+            is_neo, prefix, suffix = is_neoclassical(word, memory, **kwargs)
             prefixes.append(prefix)
             suffixes.append(suffix)
             neoclassicals.append(is_neo)
@@ -115,16 +115,34 @@ def process_data(sigmorph):
             neoclassicals.append(False)
             prefixes.append(False)
             suffixes.append(False)
-        sigmorph["Neoclassical"] = neoclassicals
-        sigmorph["Prefix"] = prefixes
-        sigmorph["Suffix"] = suffixes
+    sigmorph["Neoclassical"] = neoclassicals
+    sigmorph["Prefix"] = prefixes
+    sigmorph["Suffix"] = suffixes
 
-        for k in "Compound 	Neoclassical 	Prefix 	Suffix".split():
-            print(k, len(sigmorph[sigmorph[k] == True]))
+    for k in "Compound 	Neoclassical 	Prefix 	Suffix".split():
+        print(k, "&", len(sigmorph[sigmorph[k] == True]), r"\\")
 
     multi_label = Counter()
     for _, row in sigmorph.iterrows():
         multi_label[(row.Compound, row.Neoclassical, row.Prefix, row.Suffix)] += 1
+    print(r"Compound & Neoclassical & Prefix & Suffix & Count \\")
+    for k, v in multi_label.items():
+        print(" & ".join(["X" if b else " " for b in k]), "&", v, r"\\")
 
-    print(multi_label)
-    sigmorph.to_csv("../data/neo_sigmorphon.tsv", sep="\t")
+    if verbose:
+        for k in "Compound 	Neoclassical 	Prefix 	Suffix".split():
+            print(k, sigmorph[sigmorph[k] == True].sample(verbose))
+
+    sigmorph.to_csv(output, sep="\t")
+
+
+def main(sigmorph: Path, morphynet: Path, lang: str, output: Path, verbose: int = 0):
+    lang = {"en": "eng", "fr": "fra"}[lang]
+    morphy, morphy_prefixes, morphy_suffixes = get_morphy(morphynet, lang)
+    sigmorph, sigmorph_per_word = get_sigmorphon(sigmorph, lang)
+    process_data(sigmorph, output, sigmorph_per_word=sigmorph_per_word, morphy=morphy, morphy_prefixes=morphy_prefixes,
+                 morphy_suffixes=morphy_suffixes, verbose=verbose)
+
+
+if __name__ == "__main__":
+    CLI(main)
