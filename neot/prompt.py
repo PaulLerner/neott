@@ -14,6 +14,7 @@ from transformers import AutoModelForCausalLM, PretrainedConfig, AutoTokenizer
 from .utils import infinite_random_data, Path
 from .metrics import compute_metrics, Preprocessor
 
+ICL_SEP = "###"
 PROMPTS = {
     "en": {
         # bawden and yvon
@@ -32,7 +33,6 @@ PROMPTS = {
         "tatoeba_mt": "Traduis le terme {src_lang} suivant en {tgt_lang} {src_term}:{tgt_term}"
     }
 }
-
 LANGUAGES = {
     "en": {"en": "English", "fr": "French"},
     "fr": {"en": "anglais", "fr": "français"}
@@ -117,15 +117,14 @@ def icl(eval_set, icl_set, n_icl: int = 5, seed: int = 0, **kwargs):
         for _ in range(n_icl):
             icl_eg.append(fill_template(next(icl_gen), icl=True, **kwargs))
         icl_eg.append(fill_template(item, icl=False, **kwargs))
-        item["input_text"] = " ### ".join(icl_eg)
+        item["input_text"] = f" {ICL_SEP} ".join(icl_eg)
 
 
 def post_proc(predictions):
     proc_predictions = []
     for pred in predictions:
-        # FIXME: this could be done upstream by feeding eos_token_id to generate but comes with a lot of caveats
-        # the "###" separating the ICL examples serves as EOS signal (in case the model does extra generation)
-        i = pred.find("###")
+        # because ICL_SEP is not a special token it gets decoded by the tokenizer
+        i = pred.find(ICL_SEP)
         if i < 0:
             proc_predictions.append(pred)
         else:
@@ -135,19 +134,22 @@ def post_proc(predictions):
 
 def evaluate(eval_set, model, tokenizer, gen_kwargs, preproc, device="cuda"):
     predictions, targets = [], []
+    icl_sep_id = tokenizer.encode(" "+ICL_SEP)
+    assert len(icl_sep_id) == 1, icl_sep_id
+    eos_token_id = [tokenizer.eos_token_id, icl_sep_id[0]]
     for inputs in tqdm(eval_set):
         batch_size, seq_len = inputs["input_ids"].shape
         target_text = inputs.pop("target_text")
         for k, v in inputs.items():
             inputs[k] = v.to(device)
         # TODO top-K hypothesis
-        output = model.generate(**inputs, **gen_kwargs)
+        output = model.generate(eos_token_id=eos_token_id, **inputs, **gen_kwargs)
         # keep only newly generated tokens
         if tokenizer.padding_side == 'left':
             output = output[:, seq_len:]
         else:
             raise NotImplementedError("")
-        output_text = tokenizer.batch_decode(output)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
         predictions.extend(output_text)
         targets.extend(target_text)
     predictions = post_proc(predictions)
