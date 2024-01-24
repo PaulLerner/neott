@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
-
+import itertools
 from collections import Counter
 import pandas as pd
 from jsonargparse import CLI
@@ -120,18 +120,19 @@ def process_data(sigmorph, output, verbose: int = 0, **kwargs):
     sigmorph["Suffix"] = suffixes
 
     for k in "Compound 	Neoclassical 	Prefix 	Suffix".split():
-        print(k, "&", len(sigmorph[sigmorph[k] == True]), r"\\")
+        print(k, "&", len(sigmorph[sigmorph[k]]), r"\\")
 
     multi_label = Counter()
     for _, row in sigmorph.iterrows():
         multi_label[(row.Compound, row.Neoclassical, row.Prefix, row.Suffix)] += 1
     print(r"Compound & Neoclassical & Prefix & Suffix & Count \\")
-    for k, v in multi_label.items():
+    for k in itertools.product([False, True], repeat=4):
+        v = multi_label[k]
         print(" & ".join(["X" if b else " " for b in k]), "&", v, r"\\")
 
     if verbose:
         for k in "Compound 	Neoclassical 	Prefix 	Suffix".split():
-            print(k, sigmorph[sigmorph[k] == True].sample(verbose))
+            print(k, sigmorph[sigmorph[k]].sample(verbose))
 
     sigmorph.to_csv(output, sep="\t")
 
