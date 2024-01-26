@@ -2,10 +2,12 @@
 # coding: utf-8
 import itertools
 from collections import Counter
-import pandas as pd
 from jsonargparse import CLI
 
-from .utils import Path
+import pandas as pd
+from sklearn.model_selection import train_test_split
+
+from ..utils import Path
 
 
 def get_morphy(root_path, lang):
@@ -38,7 +40,7 @@ def get_sigmorphon(root_path, lang):
                       dtype=str)
     test = pd.read_csv(root_path / f"{lang}.word.test.gold.tsv", delimiter="\t", names=["word", "morpheme", "process"],
                        dtype=str)
-    sigmorph = pd.concat((train, dev, test))
+    sigmorph = pd.concat((train, dev, test)).dropna()
 
     process = [[], [], []]
     for c in sigmorph.process:
@@ -83,7 +85,8 @@ def is_neoclassical(word, memory, sigmorph_per_word, morphy, morphy_prefixes, mo
     elif word.word in morphy:
         for source in morphy[word.word]["source word"]:
             if source in sigmorph_per_word and source not in memory:
-                source_neo, _, _ = is_neoclassical(sigmorph_per_word[source], memory, sigmorph_per_word, morphy, morphy_prefixes, morphy_suffixes)
+                source_neo, _, _ = is_neoclassical(sigmorph_per_word[source], memory, sigmorph_per_word, morphy,
+                                                   morphy_prefixes, morphy_suffixes)
                 if source_neo:
                     return True, prefix, suffix
                 elif morphemes_are_affixes(morphemes, morphy_prefixes, morphy_suffixes):
@@ -132,17 +135,52 @@ def process_data(sigmorph, output, verbose: int = 0, **kwargs):
 
     if verbose:
         for k in "Compound 	Neoclassical 	Prefix 	Suffix".split():
-            print(k, sigmorph[sigmorph[k]].sample(verbose))
+            print(k, "\n", sigmorph[sigmorph[k]].sample(verbose))
 
     sigmorph.to_csv(output, sep="\t")
+    return sigmorph
+
+
+def to_fasttext_subset(data):
+    fasttext_data = []
+    for _, word in data.iterrows():
+        example = []
+        mono_or_inflection = True
+        for k in "Compound 	Neoclassical 	Prefix 	Suffix".split():
+            if word[k]:
+                mono_or_inflection = False
+                example.append(f"__label__{k}")
+        # OPTION 2: remove __label__MonoOrInflection: will not be used as negative
+        # if mono_or_inflection:
+        #    continue
+        # OPTION 3: use __label__MonoOrInflection as positive class
+        #      example.append("__label__MonoOrInflection")
+        example.append(word.word)
+        fasttext_data.append(" ".join(example))
+    return fasttext_data
+
+
+def to_fasttext(train, dev, test, output, lang):
+    for name, subset in [("train", train), ("test", test), ("dev", dev)]:
+        fasttext_subset = to_fasttext_subset(subset)
+        with open(output/f"{lang}_{name}.txt", "wt") as file:
+            file.write("\n".join(fasttext_subset))
 
 
 def main(sigmorph: Path, morphynet: Path, lang: str, output: Path, verbose: int = 0):
+    """Build multi-label classification dataset from SIGMORPHON 2022 and MorphyNet"""
     lang = {"en": "eng", "fr": "fra"}[lang]
     morphy, morphy_prefixes, morphy_suffixes = get_morphy(morphynet, lang)
     sigmorph, sigmorph_per_word = get_sigmorphon(sigmorph, lang)
-    process_data(sigmorph, output, sigmorph_per_word=sigmorph_per_word, morphy=morphy, morphy_prefixes=morphy_prefixes,
-                 morphy_suffixes=morphy_suffixes, verbose=verbose)
+    data = process_data(sigmorph, output/f"{lang}.tsv", sigmorph_per_word=sigmorph_per_word, morphy=morphy,
+                        morphy_prefixes=morphy_prefixes, morphy_suffixes=morphy_suffixes, verbose=verbose)
+
+    # OPTION 2: remove __label__MonoOrInflection: will not be used as negative
+    # data = data[data.Compound|data.Neoclassical|data.Prefix|data.Suffix]
+    train, devtest = train_test_split(data, test_size=0.2)
+    dev, test = train_test_split(devtest, test_size=0.5)
+
+    to_fasttext(train, dev, test, output, lang)
 
 
 if __name__ == "__main__":

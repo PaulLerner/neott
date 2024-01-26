@@ -10,8 +10,8 @@ from tqdm import tqdm
 import pandas as pd
 import seaborn as sns
 
-from .morph import Term, Inflected, Prefixed, Suffixed, Converted, Native, Neoclassical, Syntagm
-from .utils import random_data, Path
+from .classes import Term, Inflected, Prefixed, Suffixed, Converted, Native, Neoclassical, Syntagm
+from ..utils import random_data, Path
 
 
 class MorphyType(enum.Enum):
