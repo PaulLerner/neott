@@ -64,16 +64,14 @@ def morphemes_are_affixes(morphemes, morphy_prefixes, morphy_suffixes):
 def is_neoclassical(word, memory, sigmorph_per_word, morphy, morphy_prefixes, morphy_suffixes):
     memory.add(word.word)
     morphemes = word.morpheme.split(" @@")
-    p_freq = morphy_prefixes.get(morphemes[0], 0)
     # inflection comes after suffixation
     if word.Inflection:
-        s = morphemes[-2]
-    else:
-        s = morphemes[-1]
-    s_freq = morphy_suffixes.get(s, 0)
+        morphemes.pop()
+    p_freq = morphy_prefixes.get(morphemes[0], 0)
+    s_freq = morphy_suffixes.get(morphemes[-1], 0)
 
-    # the prefix is more frequent than the suffix OR (both equal or UNK but prefix shorther than suffix)
-    if (p_freq > s_freq) or ((p_freq == s_freq) and (len(morphemes[0]) < len(s))):
+    # the prefix is more frequent than the suffix OR (both equal or UNK but prefix shorter than suffix)
+    if (p_freq > s_freq) or ((p_freq == s_freq) and (len(morphemes[0]) < len(morphemes[-1]))):
         prefix = True
         suffix = False
     else:
@@ -92,7 +90,7 @@ def is_neoclassical(word, memory, sigmorph_per_word, morphy, morphy_prefixes, mo
                 elif morphemes_are_affixes(morphemes, morphy_prefixes, morphy_suffixes):
                     return True, False, False
                 # 3 or more morphemes but not neo -> prefix and suffix
-                elif len(morphemes) - int(word.Inflection) > 2:
+                elif len(morphemes) > 2:
                     return False, True, True
                 else:
                     return False, prefix, suffix
@@ -169,6 +167,7 @@ def to_fasttext(train, dev, test, output, lang):
 
 def main(sigmorph: Path, morphynet: Path, lang: str, output: Path, verbose: int = 0):
     """Build multi-label classification dataset from SIGMORPHON 2022 and MorphyNet"""
+    output.mkdir(exist_ok=True)
     lang = {"en": "eng", "fr": "fra"}[lang]
     morphy, morphy_prefixes, morphy_suffixes = get_morphy(morphynet, lang)
     sigmorph, sigmorph_per_word = get_sigmorphon(sigmorph, lang)
