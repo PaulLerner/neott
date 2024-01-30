@@ -9,7 +9,7 @@ def get_stopwords(lang):
         stopwords = nltk.corpus.stopwords.words(lang)
     except LookupError:
         nltk.download('stopwords')
-        get_stopwords(lang)
+        return get_stopwords(lang)
     return stopwords
 
 
