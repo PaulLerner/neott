@@ -29,7 +29,7 @@ class Preprocessor:
 
 
 def em(pred, tgt):
-    return pred == tgt
+    return 1.0 if pred == tgt else 0.0
 
 
 def f1(pred, tgt):
@@ -38,7 +38,7 @@ def f1(pred, tgt):
     common = Counter(pred_tokens) & Counter(tgt_tokens)
     tp = sum(common.values())
     if tp == 0:
-        return 0
+        return 0.0
     precision = tp / len(pred_tokens)
     recall = tp / len(tgt_tokens)
     return (2 * precision * recall) / (precision + recall)
