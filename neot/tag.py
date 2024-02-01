@@ -14,6 +14,8 @@ import spacy
 from spacy.lang.en import English
 from spacy.lang.fr import French
 
+print(f"{spacy.prefer_gpu()=}")
+
 
 def tag(data, en, fr, tagging=True):
     for item in tqdm(data):
@@ -69,9 +71,9 @@ def viz_pos(data):
     for pos, count in Counter(en_fr_pos).most_common(20):
         for item in data:
             fr_pos = " ".join(item["fr"]["pos"])
-            en_pos = " ".join(item["en"]["pos"])
-            if pos == f"{en_pos} = {fr_pos}":
-                print(en_pos, "&", fr_pos, "&", count, "&", item["en"]["text"], "&", item["fr"]["text"], r"\\")
+            en_p = " ".join(item["en"]["pos"])
+            if pos == f"{en_p} = {fr_pos}":
+                print(en_p, "&", fr_pos, "&", count, "&", item["en"]["text"], "&", item["fr"]["text"], r"\\")
                 break
 
     en_poses = {}
@@ -96,19 +98,21 @@ def main(data_path: str, tagging: bool = True):
 
     if tagging:
         disable = ["lemmatizer", "ner"]
-        en = spacy.load("en_core_web_sm", disable=disable)
-        fr = spacy.load("fr_core_news_sm", disable=disable)
+        en = spacy.load("en_core_web_trf", disable=disable)
+        fr = spacy.load("fr_dep_news_trf", disable=disable)
     else:
         en = English()
         fr = French()
 
-    tag(data, en, fr)
+    for name, subset in data.items():
+        tag(subset, en, fr)
+
     with open(data_path, "wt") as file:
         json.dump(data, file)
 
     if tagging:
-        viz_dep(data)
-        viz_pos(data)
+        viz_dep(data["test"])
+        viz_pos(data["test"])
 
 
 if __name__ == "__main__":
