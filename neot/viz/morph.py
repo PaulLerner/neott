@@ -5,15 +5,13 @@
 import json
 from collections import Counter
 
-from scipy.stats import entropy
-import numpy as np
 import pandas as pd
 
 import seaborn as sns
 
 from ..utils import random_data
 
-with open("../data/FranceTerme_triples.json", "rt") as file:
+with open("data/FranceTerme_triples.json", "rt") as file:
     data = json.load(file)
 
 sym_diff = []
@@ -21,6 +19,8 @@ sym_diff = []
 labels, fr_labels, en_labels = [], [], []
 eg = {}
 en2fr = {}
+tps, cps, pps = Counter(), Counter(), Counter()
+
 for item in random_data(data["train"]):
     p_fr = item["fr"]["morph_label"]
     p_en = item["en"]["morph_label"]
@@ -31,10 +31,25 @@ for item in random_data(data["train"]):
     en2fr[p_en][p_fr] += 1
     fr_labels.append(p_fr)
     en_labels.append(p_en)
+    for label in "Compound 	Neoclassical 	Prefix 	Suffix Syntagm".split():
+        if label in p_en:
+            pps[label] += 1
+            if label in p_fr:
+                tps[label] += 1
+        if label in p_fr:
+            cps[label] += 1
+
     p_bi = f"{p_en} = {p_fr}"
     if p_bi not in eg:
         eg[p_bi] = (item["en"]["text"], item["fr"]["text"])
     labels.append(p_bi)
+
+metrics_per_label = {}
+for k, v in tps.items():
+    metrics_per_label[k] = {"precision": v/pps[k], "recall": v/cps[k]}
+metrics_per_label = pd.DataFrame(metrics_per_label).T
+metrics_per_label['f1'] = (2*metrics_per_label['precision']*metrics_per_label['recall'])/(metrics_per_label['precision']+metrics_per_label['recall'])
+print((metrics_per_label*100).to_latex(float_format='%.1f'))
 
 sns.displot(sym_diff, discrete=True)
 
@@ -48,7 +63,4 @@ print(pd.DataFrame(Counter(fr_labels).most_common()).to_latex(index=False))
 print(pd.DataFrame(Counter(en_labels).most_common()).to_latex(index=False))
 
 for en, count in Counter(en_labels).most_common(20):
-    p = en2fr[en].most_common(1)[0][1] / count
-    e = entropy(np.array(list(en2fr[en].values())) / count)
-    print(en, "&", count, "&", f"{p:.2f} & ", f"{e:.2f} & ", " / ".join([k for k, _ in en2fr[en].most_common(5)]),
-          r"\\")
+    print(en, "&", count, "&", " / ".join([k for k, _ in en2fr[en].most_common(5)]), r"\\")
