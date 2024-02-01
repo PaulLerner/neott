@@ -22,5 +22,6 @@ for v in deciles:
     i = np.where(freq_v == v)[0][0]
     print(freq_k[i], "&", v, r"\\")
 
-fig = sns.displot(freq_v, bins=100, log_scale=True)
+# shift by 1 to plot zero values in log-scale
+fig = sns.displot(freq_v+1, bins=100, log_scale=True)
 fig.savefig("viz/FranceTerme_freq_fr_roots.pdf")
