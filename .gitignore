@@ -158,6 +158,7 @@ cython_debug/
 # local data
 /data/
 drafts/
+*.pdf
 
 # ipython
 *.ipynb
