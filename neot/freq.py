@@ -32,7 +32,8 @@ def main(glossary: str, corpus: Path, output: str, lang: str = "fr", hf: bool = 
     terms = set(item[lang]["text"].lower().strip() for subset in glossary.values() for item in subset)
     print(f"{len(terms)=}")
     automaton = build_automaton(terms)
-    counter = Counter()
+    # not necessary with Counter but eases downstream analysis
+    counter = Counter({term: 0 for term in terms})
     if hf:
         corpus = datasets.load_from_disk(corpus)
         corpus.map(count, input_columns="text", batched=True, batch_size=batch_size, fn_kwargs=dict(automaton=automaton, counter=counter))
