@@ -46,16 +46,21 @@ def gather_results(data, metrics, tokenizer):
         for label in "Compound 	Neoclassical 	Prefix 	Suffix Syntagm".split():
             fr_ova[label][label in p_fr].append(em)
             en_ova[label][label in p_en].append(em)
-        term_fertility = len(tokenizer.tokenize(item['fr']["text"]))
-        token_fertility = []
-        for token in item["fr"]["tokens"]:
-            token_fertility.append(len(tokenizer.tokenize(token)))
+        if tokenizer is not None:
+            term_fertility = len(tokenizer.tokenize(item['fr']["text"]))
+            token_fertility = []
+            for token in item["fr"]["tokens"]:
+                token_fertility.append(len(tokenizer.tokenize(token)))
+            token_fertility = max(token_fertility)
+        else:
+            term_fertility = None
+            token_fertility = None
         results.append({
             "Morph. Diff.": len(set(p_en).symmetric_difference(set(p_fr))),
             "EM": em,
             "Edit dist.": editdistance.eval(item['fr']["text"], item['en']["text"]),
             "Term fertility": term_fertility,
-            "Word fertility": max(token_fertility),
+            "Word fertility": token_fertility,
             "# words": len(item["fr"]["tokens"])
         })
         for dom in item["Dom"]:
@@ -98,26 +103,28 @@ def viz_dists(results, **kwargs):
 
 
 def viz_ova(fr_ova, en_ova):
+    print("EN\n", (en_ova * 100).to_latex(float_format="%.1f"))
     print("FR\n", (fr_ova * 100).to_latex(float_format="%.1f"))
-    print("EN\n",(en_ova * 100).to_latex(float_format="%.1f"))
 
 
-def main(data: Path, pred: Path, tokenizer: str, output: Path):
-    output.mkdir(exist_ok=True)
+def main(data: Path, pred: Path, tokenizer: str = None, output: Path = None):
     with open(data, "rt") as file:
         data = json.load(file)
 
     with open(pred, "rt") as file:
         pred = json.load(file)
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer, add_prefix_space=True)
+    if tokenizer is not None:
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer, add_prefix_space=True)
 
     metrics = pred["metrics"]
     viz_f1(data, pred, metrics)
     viz_wrong(data, pred, metrics)
-    dist_f1(metrics, output)
     results, per_dom, fr_ova, en_ova = gather_results(data, metrics, tokenizer)
-    viz_dists(results, output=output)
     viz_ova(fr_ova, en_ova)
+    if output is not None:
+        output.mkdir(exist_ok=True)
+        dist_f1(metrics, output)
+        viz_dists(results, output=output)
 
 
 if __name__ == "__main__":
