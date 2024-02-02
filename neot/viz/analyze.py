@@ -12,6 +12,7 @@ import pandas as pd
 from transformers import AutoTokenizer
 
 from ..utils import Path
+from ..morph.classes import MorphLabel
 
 
 def viz_f1(data, pred, metrics):
@@ -36,16 +37,16 @@ def dist_f1(metrics, output):
 def gather_results(data, metrics, tokenizer):
     results = []
 
-    fr_ova = {c: {True: [], False: []} for c in "Compound 	Neoclassical 	Prefix 	Suffix Syntagm".split()}
-    en_ova = {c: {True: [], False: []} for c in "Compound 	Neoclassical 	Prefix 	Suffix Syntagm".split()}
+    fr_ova = {c.name: {True: [], False: []} for c in MorphLabel}
+    en_ova = {c.name: {True: [], False: []} for c in MorphLabel}
     per_dom = []
     for i, item in enumerate(data["train"]):
         p_fr = item["fr"]["morph_label"]
         p_en = item["en"]["morph_label"]
         em = metrics["ems"][i]
-        for label in "Compound 	Neoclassical 	Prefix 	Suffix Syntagm".split():
-            fr_ova[label][label in p_fr].append(em)
-            en_ova[label][label in p_en].append(em)
+        for label in MorphLabel:
+            fr_ova[label.name][label.name in p_fr].append(em)
+            en_ova[label.name][label.name in p_en].append(em)
         if tokenizer is not None:
             term_fertility = len(tokenizer.tokenize(item['fr']["text"]))
             token_fertility = []

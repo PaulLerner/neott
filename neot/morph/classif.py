@@ -12,6 +12,7 @@ import seaborn as sns
 import fasttext
 
 from ..utils import Path
+from .classes import MorphLabel
 
 
 class Classifier:
@@ -67,7 +68,7 @@ class Classifier:
             for item in subset:
                 label = [l[len('__label__'):] for l in self.model.predict(item[lang]['text'], k=-1, threshold=0.5)[0]]
                 if len(item[lang]["tokens"]) > 1:
-                    label.append("Syntagm")
+                    label.append(MorphLabel.Syntagm.name)
                 item[lang]["morph_label"] = label
                 labels[" ".join(sorted(label))] += 1
         print(labels.most_common())

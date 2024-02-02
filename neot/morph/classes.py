@@ -1,5 +1,14 @@
 # -*- coding: utf-8 -*-
 from typing import List
+import enum
+
+
+class MorphLabel(enum.Enum):
+    Prefixed = 0
+    Suffixed = 1
+    Neoclassical = 2
+    Native = 3
+    Syntagm = 4
 
 
 class Term:

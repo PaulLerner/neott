@@ -8,6 +8,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 
 from ..utils import Path
+from .classes import MorphLabel
 
 
 def get_morphy(root_path, lang):
@@ -46,7 +47,7 @@ def get_sigmorphon(root_path, lang):
     for c in sigmorph.process:
         for i, value in enumerate(c):
             process[i].append(True if value == "1" else False)
-    for i, k in enumerate(["Inflection", "Derivation", "Compound"]):
+    for i, k in enumerate(["Inflection", "Derivation", MorphLabel.Native.name]):
         sigmorph[k] = process[i]
 
     sigmorph_per_word = {}
@@ -116,24 +117,24 @@ def process_data(sigmorph, output, verbose: int = 0, **kwargs):
             neoclassicals.append(False)
             prefixes.append(False)
             suffixes.append(False)
-    sigmorph["Neoclassical"] = neoclassicals
-    sigmorph["Prefix"] = prefixes
-    sigmorph["Suffix"] = suffixes
+    sigmorph[MorphLabel.Neoclassical.name] = neoclassicals
+    sigmorph[MorphLabel.Prefixed.name] = prefixes
+    sigmorph[MorphLabel.Suffixed.name] = suffixes
 
-    for k in "Compound 	Neoclassical 	Prefix 	Suffix".split():
-        print(k, "&", len(sigmorph[sigmorph[k]]), r"\\")
+    for k in MorphLabel:
+        print(k, "&", len(sigmorph[sigmorph[k.name]]), r"\\")
 
     multi_label = Counter()
     for _, row in sigmorph.iterrows():
-        multi_label[(row.Compound, row.Neoclassical, row.Prefix, row.Suffix)] += 1
-    print(r"Compound & Neoclassical & Prefix & Suffix & Count \\")
+        multi_label[(row[MorphLabel.Native.name], row[MorphLabel.Neoclassical.name], row[MorphLabel.Prefixed.name], row[MorphLabel.Suffixed.name])] += 1
+    print(" & ".join(l.name for l in MorphLabel) + r" & Count \\")
     for k in itertools.product([False, True], repeat=4):
         v = multi_label[k]
         print(" & ".join(["X" if b else " " for b in k]), "&", v, r"\\")
 
     if verbose:
-        for k in "Compound 	Neoclassical 	Prefix 	Suffix".split():
-            print(k, "\n", sigmorph[sigmorph[k]].sample(verbose))
+        for k in MorphLabel:
+            print(k, "\n", sigmorph[sigmorph[k.name]].sample(verbose))
 
     sigmorph.to_csv(output, sep="\t")
     return sigmorph
@@ -144,10 +145,10 @@ def to_fasttext_subset(data):
     for _, word in data.iterrows():
         example = []
         mono_or_inflection = True
-        for k in "Compound 	Neoclassical 	Prefix 	Suffix".split():
-            if word[k]:
+        for k in MorphLabel:
+            if word[k.name]:
                 mono_or_inflection = False
-                example.append(f"__label__{k}")
+                example.append(f"__label__{k.name}")
         # OPTION 2: remove __label__MonoOrInflection: will not be used as negative
         # if mono_or_inflection:
         #    continue

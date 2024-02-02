@@ -9,6 +9,7 @@ import pandas as pd
 
 import seaborn as sns
 
+from ..morph.classes import MorphLabel
 from ..utils import random_data
 
 with open("data/FranceTerme_triples.json", "rt") as file:
@@ -31,13 +32,13 @@ for item in random_data(data["train"]):
     en2fr[p_en][p_fr] += 1
     fr_labels.append(p_fr)
     en_labels.append(p_en)
-    for label in "Compound 	Neoclassical 	Prefix 	Suffix Syntagm".split():
-        if label in p_en:
-            pps[label] += 1
+    for label in MorphLabel:
+        if label.name in p_en:
+            pps[label.name] += 1
             if label in p_fr:
-                tps[label] += 1
+                tps[label.name] += 1
         if label in p_fr:
-            cps[label] += 1
+            cps[label.name] += 1
 
     p_bi = f"{p_en} = {p_fr}"
     if p_bi not in eg:
