@@ -11,6 +11,8 @@ import pandas as pd
 
 from transformers import AutoTokenizer
 
+import spacy
+
 from ..utils import Path
 from ..morph.classes import MorphLabel
 
@@ -108,12 +110,28 @@ def viz_ova(fr_ova, en_ova):
     print("FR\n", (fr_ova * 100).to_latex(float_format="%.1f"))
 
 
-def main(data: Path, pred: Path, tokenizer: str = None, output: Path = None):
+def tag(pred, tagger):
+    poses = []
+    stripped_preds = [p.strip() for p in pred["predictions"]]
+    for doc in tagger.pipe(stripped_preds, batch_size=2048):
+        poses.append([t.pos_ for t in doc])
+
+    pred["pos"] = poses
+
+
+def main(data: Path, pred_path: Path, tokenizer: str = None, output: Path = None, tagger: str = None):
     with open(data, "rt") as file:
         data = json.load(file)
 
-    with open(pred, "rt") as file:
+    with open(pred_path, "rt") as file:
         pred = json.load(file)
+    if tagger is not None:
+        print(f"{spacy.prefer_gpu()=}")
+        tagger = spacy.load(tagger)
+        tag(pred, tagger)
+        with open(pred_path, "wt") as file:
+            json.dump(pred, file)
+
     if tokenizer is not None:
         tokenizer = AutoTokenizer.from_pretrained(tokenizer, add_prefix_space=True)
 
