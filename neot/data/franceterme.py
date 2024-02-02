@@ -7,6 +7,8 @@ import json
 
 
 def get_data(tree):
+    root = tree.getroot()
+    articles = root.findall("Article")
     triples = []
     fem_reg = re.compile(r", -\w+")
     article_reg = re.compile(r" \(.+\)")
@@ -64,8 +66,6 @@ def get_data(tree):
 
 if __name__ == '__main__':
     tree = ET.parse('data/FranceTerme.xml')
-    root = tree.getroot()
-    articles = root.findall("Article")
     triples = get_data(tree)
     with open("data/FranceTerme_triples.json", "wt") as file:
         json.dump(triples, file)
