@@ -17,17 +17,13 @@ from spacy.lang.fr import French
 print(f"{spacy.prefer_gpu()=}")
 
 
-def tag(data, en, fr, tagging=True):
-    for item in tqdm(data):
-        doc_fr = fr(item["fr"]["text"])
-        doc_en = en(item["en"]["text"])
-        item["fr"]["tokens"] = [t.text for t in doc_fr]
-        item["en"]["tokens"] = [t.text for t in doc_en]
+def tag(data, model, lang, tagging=True, batch_size=2048):
+    docs = list(tqdm(model.pipe([item[lang]["text"] for item in data], batch_size=batch_size)))
+    for item, doc in zip(data, docs):
+        item[lang]["tokens"] = [t.text for t in doc]
         if tagging:
-            item["fr"]["pos"] = [t.pos_ for t in doc_fr]
-            item["en"]["pos"] = [t.pos_ for t in doc_en]
-            item["fr"]["dep"] = [t.dep_ for t in doc_fr]
-            item["en"]["dep"] = [t.dep_ for t in doc_en]
+            item[lang]["pos"] = [t.pos_ for t in doc]
+            item[lang]["dep"] = [t.dep_ for t in doc]
 
 
 def viz_dep(data):
@@ -105,7 +101,8 @@ def main(data_path: str, tagging: bool = True):
         fr = French()
 
     for name, subset in data.items():
-        tag(subset, en, fr)
+        tag(subset, en, "en", tagging=tagging)
+        tag(subset, fr, "fr", tagging=tagging)
 
     with open(data_path, "wt") as file:
         json.dump(data, file)
