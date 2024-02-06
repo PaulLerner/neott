@@ -1,5 +1,5 @@
 import os
-from typing import Optional, Union
+from typing import Optional, Union, List
 
 import pandas as pd
 from jsonargparse import CLI
@@ -11,7 +11,7 @@ import numpy as np
 from torch.utils.data import DataLoader
 from transformers import AutoModelForCausalLM, PretrainedConfig, AutoTokenizer
 
-from .utils import infinite_random_data, Path
+from .utils import infinite_random_data, Path, ListOrArg
 from .metrics import compute_metrics, Preprocessor
 
 ICL_SEP = "###"
@@ -189,9 +189,9 @@ class PromptKwargs:
     src: str = "en"
     tgt: str = "fr"
     n_icl: int = 5
-    template_lang: str = "fr"
+    template_lang: Union[str, List[str]] = "fr"
     def_lang: str = "fr"
-    template_form: str = "term"
+    template_form: Union[str, List[str]] = "term"
 
 
 def prompt(eval_set, icl_set, model, tokenizer, data_collator, seed: int = 0, src: str = "en", tgt: str = "fr",
@@ -234,13 +234,12 @@ def main(data_path: str, eval_set: str = "dev", icl_set: str = "train", prompt_k
         model = model.to(model_kwargs.device_map)
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, add_prefix_space=add_prefix_space)
     data_collator = DataCollator(tokenizer, tgt=prompt_kwargs.tgt, **asdict(tokenizer_kwargs))
-    template_langs = PROMPTS.keys() if prompt_kwargs.template_lang is None else [prompt_kwargs.template_lang]
+    template_langs = PROMPTS.keys() if prompt_kwargs.template_lang is None else ListOrArg(prompt_kwargs.template_lang)
     search_templates = prompt_kwargs.template_form is None
     results = []
-    # TODO easily iter through hyperparameters without nested loops (using itertools?)
     for template_lang in template_langs:
         prompt_kwargs.template_lang = template_lang
-        template_forms = PROMPTS[template_lang].keys() if search_templates else [prompt_kwargs.template_form]
+        template_forms = PROMPTS[template_lang].keys() if search_templates else ListOrArg(prompt_kwargs.template_form)
         for template_form in template_forms:
             prompt_kwargs.template_form = template_form
             metrics = prompt(eval_set, icl_set, model, tokenizer, data_collator, **asdict(prompt_kwargs),
