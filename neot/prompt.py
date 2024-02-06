@@ -141,8 +141,9 @@ def post_proc(predictions):
 
 def evaluate(eval_set, model, tokenizer, gen_kwargs, preproc, device="cuda"):
     predictions, targets = [], []
-    icl_sep_id = tokenizer.encode(" " + ICL_SEP)
+    icl_sep_id = tokenizer.encode(" " + ICL_SEP, add_special_tokens=False)
     assert len(icl_sep_id) == 1, icl_sep_id
+    assert tokenizer.eos_token_id is not None
     eos_token_id = [tokenizer.eos_token_id, icl_sep_id[0]]
     for inputs in tqdm(eval_set):
         batch_size, seq_len = inputs["input_ids"].shape
