@@ -63,15 +63,17 @@ class Classifier:
         """Predict on OOD data"""
         with open(predict_path, 'rt') as file:
             data = json.load(file)
-        labels = Counter()
+        labels, multi_labels = Counter(), Counter()
         for subset in data.values():
             for item in subset:
                 label = [l[len('__label__'):] for l in self.model.predict(item[lang]['text'], k=-1, threshold=0.5)[0]]
                 if len(item[lang]["tokens"]) > 1:
                     label.append(MorphLabel.Syntagm.name)
                 item[lang]["morph_label"] = label
-                labels[" ".join(sorted(label))] += 1
+                labels += Counter(label)
+                multi_labels[" ".join(sorted(label))] += 1
         print(labels.most_common())
+        print(multi_labels.most_common())
         with open(predict_path, 'wt') as file:
             json.dump(data, file)
 
