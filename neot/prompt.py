@@ -84,6 +84,7 @@ class TokenizerKwargs:
 class GenKwargs:
     num_beams: int = 4
     max_new_tokens: int = 64
+    num_return_sequences: int = 1
 
 
 def fill_template(item, template, icl=False, src="en", tgt="fr", src_lang="anglais", tgt_lang="français",
@@ -143,7 +144,7 @@ def evaluate(eval_set, model, tokenizer, gen_kwargs, preproc, device="cuda"):
         for k, v in inputs.items():
             inputs[k] = v.to(device)
         # TODO top-K hypothesis
-        output = model.generate(eos_token_id=eos_token_id, **inputs, **gen_kwargs)
+        output = model.generate(eos_token_id=eos_token_id, return_dict_in_generate=True, **inputs, **gen_kwargs).sequences
         # keep only newly generated tokens
         if tokenizer.padding_side == 'left':
             output = output[:, seq_len:]
@@ -153,8 +154,13 @@ def evaluate(eval_set, model, tokenizer, gen_kwargs, preproc, device="cuda"):
         predictions.extend(output_text)
         targets.extend(target_text)
     predictions = post_proc(predictions)
-    metrics = compute_metrics(predictions, targets, preproc)
-    return {"metrics": metrics, "predictions": predictions}
+    k = gen_kwargs["num_return_sequences"]
+    assert len(predictions) % k == 0
+    predictions_per_input = []
+    for i in range(0, len(predictions), k):
+        predictions_per_input.append(predictions[i: i+k])
+    metrics = compute_metrics(predictions_per_input, targets, preproc, k=k)
+    return {"metrics": metrics, "predictions": predictions_per_input}
 
 
 class DataCollator:
@@ -183,7 +189,6 @@ class PromptKwargs:
 def prompt(eval_set, icl_set, model, tokenizer, data_collator, seed: int = 0, src: str = "en", tgt: str = "fr",
            n_icl: int = 5, template_lang: str = "fr", def_lang: str = "fr", template_form: str = "term", device="cuda",
            data_kwargs: DataKwargs = DataKwargs(), gen_kwargs: GenKwargs = GenKwargs(), output_path: Path = None):
-    """Prompt LLMs to generate terms (by translating them and/or given their definition)"""
     preproc = Preprocessor(tgt)
     src_lang = LANGUAGES[template_lang][src]
     tgt_lang = LANGUAGES[template_lang][tgt]
@@ -224,6 +229,7 @@ def main(data_path: str, eval_set: str = "dev", icl_set: str = "train", prompt_k
     template_langs = PROMPTS.keys() if prompt_kwargs.template_lang is None else [prompt_kwargs.template_lang]
     search_templates = prompt_kwargs.template_form is None
     results = []
+    # TODO easily iter through hyperparameters without nested loops (using itertools?)
     for template_lang in template_langs:
         prompt_kwargs.template_lang = template_lang
         template_forms = PROMPTS[template_lang].keys() if search_templates else [prompt_kwargs.template_form]

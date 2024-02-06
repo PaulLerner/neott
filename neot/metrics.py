@@ -18,7 +18,7 @@ class Preprocessor:
         nltk_lang = {"en": 'english', 'fr': 'french'}[lang]
         stopwords = '|'.join(get_stopwords(nltk_lang))
         self.stopwords = re.compile(rf"\b({stopwords})\b")
-        self.words = re.compile("\w+")
+        self.words = re.compile(r"\w+")
 
     def __call__(self, text):
         text = text.lower()
@@ -44,15 +44,24 @@ def f1(pred, tgt):
     return (2 * precision * recall) / (precision + recall)
 
 
-def compute_metrics(predictions, targets, preproc):
-    ems, f1s = [], []
+def compute_metrics(predictions, targets, preproc, k: int = 1):
+    ems, f1s, recalls = [], [], []
     for pred, tgt in zip(predictions, targets):
-        pred, tgt = preproc(pred), preproc(tgt)
-        ems.append(em(pred, tgt))
-        f1s.append(f1(pred, tgt))
+        tgt = preproc(tgt)
+        for i in range(k):
+            p = preproc(pred[i])
+            em_score = em(p, tgt)
+            if i == 0:
+                ems.append(em_score)
+                f1s.append(f1(p, tgt))
+            if em_score == 1.0:
+                break
+        recalls.append(em_score)
     return {
         "em": sum(ems) / len(ems),
         "f1": sum(f1s) / len(f1s),
+        f"recall@{k}": sum(recalls)/len(recalls),
         "ems": ems,
-        "f1s": f1s
+        "f1s": f1s,
+        f"recalls@{k}": recalls
     }
