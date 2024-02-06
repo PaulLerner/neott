@@ -115,8 +115,14 @@ def icl(eval_set, icl_set, n_icl: int = 5, seed: int = 0, **kwargs):
     icl_gen = infinite_random_data(icl_set)
     for item in eval_set:
         icl_eg = []
-        for _ in range(n_icl):
-            icl_eg.append(fill_template(next(icl_gen), icl=True, **kwargs))
+        i = 0
+        while i < n_icl:
+            eg = next(icl_gen)
+            # do not use self in the prompt (may happen if using eval_set as icl_set)
+            if eg["id"] == item["id"]:
+                continue
+            icl_eg.append(fill_template(eg, icl=True, **kwargs))
+            i += 1
         icl_eg.append(fill_template(item, icl=False, **kwargs))
         item["input_text"] = f" {ICL_SEP} ".join(icl_eg)
 
@@ -135,7 +141,7 @@ def post_proc(predictions):
 
 def evaluate(eval_set, model, tokenizer, gen_kwargs, preproc, device="cuda"):
     predictions, targets = [], []
-    icl_sep_id = tokenizer.encode(" "+ICL_SEP)
+    icl_sep_id = tokenizer.encode(" " + ICL_SEP)
     assert len(icl_sep_id) == 1, icl_sep_id
     eos_token_id = [tokenizer.eos_token_id, icl_sep_id[0]]
     for inputs in tqdm(eval_set):
@@ -144,7 +150,8 @@ def evaluate(eval_set, model, tokenizer, gen_kwargs, preproc, device="cuda"):
         for k, v in inputs.items():
             inputs[k] = v.to(device)
         # TODO top-K hypothesis
-        output = model.generate(eos_token_id=eos_token_id, return_dict_in_generate=True, **inputs, **gen_kwargs).sequences
+        output = model.generate(eos_token_id=eos_token_id, return_dict_in_generate=True, **inputs,
+                                **gen_kwargs).sequences
         # keep only newly generated tokens
         if tokenizer.padding_side == 'left':
             output = output[:, seq_len:]
@@ -158,7 +165,7 @@ def evaluate(eval_set, model, tokenizer, gen_kwargs, preproc, device="cuda"):
     assert len(predictions) % k == 0
     predictions_per_input = []
     for i in range(0, len(predictions), k):
-        predictions_per_input.append(predictions[i: i+k])
+        predictions_per_input.append(predictions[i: i + k])
     metrics = compute_metrics(predictions_per_input, targets, preproc, k=k)
     return {"metrics": metrics, "predictions": predictions_per_input}
 
@@ -205,7 +212,7 @@ def prompt(eval_set, icl_set, model, tokenizer, data_collator, seed: int = 0, sr
             metrics[k] = v
     print(metrics)
     if output_path is not None:
-        with open(output_path/f"{template_lang}_{template_form}.json", 'wt') as file:
+        with open(output_path / f"{template_lang}_{template_form}.json", 'wt') as file:
             json.dump(output, file)
     return metrics
 
@@ -236,13 +243,13 @@ def main(data_path: str, eval_set: str = "dev", icl_set: str = "train", prompt_k
         for template_form in template_forms:
             prompt_kwargs.template_form = template_form
             metrics = prompt(eval_set, icl_set, model, tokenizer, data_collator, **asdict(prompt_kwargs),
-                            device=model_kwargs.device_map, data_kwargs=data_kwargs, gen_kwargs=gen_kwargs,
-                            output_path=output_path)
+                             device=model_kwargs.device_map, data_kwargs=data_kwargs, gen_kwargs=gen_kwargs,
+                             output_path=output_path)
             metrics.update({"template_lang": template_lang, "template_form": template_form})
             results.append(metrics)
     print(results)
     if output_path is not None:
-        pd.DataFrame(results).to_csv(output_path/"results.csv")
+        pd.DataFrame(results).to_csv(output_path / "results.csv")
 
 
 if __name__ == "__main__":
