@@ -3,12 +3,20 @@
 import itertools
 from collections import Counter
 from jsonargparse import CLI
+import enum
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
 from ..utils import Path
-from .classes import MorphLabel
+
+
+class MorphLabel(enum.Enum):
+    Prefixed = 0
+    Suffixed = 1
+    Neoclassical = 2
+    Native = 3
+    Syntagm = 4
 
 
 def get_morphy(root_path, lang):

@@ -12,7 +12,7 @@ import seaborn as sns
 import fasttext
 
 from ..utils import Path
-from .classes import MorphLabel
+from .labels import MorphLabel
 
 
 class Classifier:

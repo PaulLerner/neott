@@ -14,7 +14,8 @@ from transformers import AutoTokenizer
 import spacy
 
 from ..utils import Path
-from ..morph.classes import MorphLabel
+from ..morph.labels import MorphLabel
+
 
 
 def viz_f1(data, pred, metrics):

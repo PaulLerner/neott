@@ -9,7 +9,7 @@ import pandas as pd
 
 import seaborn as sns
 
-from ..morph.classes import MorphLabel
+from ..morph.labels import MorphLabel
 from ..utils import random_data
 
 with open("data/FranceTerme_triples.json", "rt") as file:
