@@ -71,4 +71,4 @@ def main(glossary: str, corpus: Path, output: str, lang: str = "fr", hf: bool = 
 
 
 if __name__ == "__main__":
-    CLI(main)
+    CLI(main, description=main.__doc__)

@@ -17,4 +17,4 @@ def main(output: str, names: List[str] = None, cache_dir: str = None):
 
 
 if __name__ == "__main__":
-    CLI(main)
+    CLI(main, description=main.__doc__)

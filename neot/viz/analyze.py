@@ -148,4 +148,4 @@ def main(data: Path, pred_path: Path, tokenizer: str = None, output: Path = None
 
 
 if __name__ == "__main__":
-    CLI(main)
+    CLI(main, description=main.__doc__)

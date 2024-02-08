@@ -253,4 +253,4 @@ def main(data_path: str, eval_set: str = "dev", icl_set: str = "train", prompt_k
 
 
 if __name__ == "__main__":
-    CLI(main)
+    CLI(main, description=main.__doc__)

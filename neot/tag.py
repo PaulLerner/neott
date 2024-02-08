@@ -113,4 +113,4 @@ def main(data_path: str, tagging: bool = True):
 
 
 if __name__ == "__main__":
-    CLI(main)
+    CLI(main, description=main.__doc__)

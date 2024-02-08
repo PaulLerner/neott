@@ -192,4 +192,4 @@ def main(sigmorph: Path, morphynet: Path, lang: str, output: Path, verbose: int 
 
 
 if __name__ == "__main__":
-    CLI(main)
+    CLI(main, description=main.__doc__)

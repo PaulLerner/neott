@@ -46,4 +46,4 @@ def main(output: str, freq_paths: Union[str, List[str]] = None):
 
 
 if __name__ == "__main__":
-    CLI(main)
+    CLI(main, description=main.__doc__)
