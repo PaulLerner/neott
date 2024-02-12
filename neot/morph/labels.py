@@ -12,10 +12,10 @@ from ..utils import Path
 
 
 class MorphLabel(enum.Enum):
-    Prefixed = 0
-    Suffixed = 1
+    Prefix = 0
+    Suffix = 1
     Neoclassical = 2
-    Native = 3
+    Compound = 3
     Syntagm = 4
 
 
