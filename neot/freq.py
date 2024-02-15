@@ -61,6 +61,11 @@ def main(glossary: str, corpus: Path, output: str, lang: str = "fr", hf: bool = 
         corpus = datasets.load_from_disk(corpus)
         corpus.map(count, input_columns="text", batched=True, batch_size=batch_size,
                    fn_kwargs=dict(automaton=automaton, counter=counter, preproc=preproc))
+    elif corpus.is_file():
+        with open(corpus, 'rt') as file:
+            texts = file.read().split("\n")
+        for b in tqdm(list(range(0, len(texts), batch_size))):
+            count(texts[b: b + batch_size], automaton, counter, preproc)
     else:
         for input_path in tqdm(list(corpus.glob('*.jsonl'))):
             texts = pd.read_json(input_path, lines=True).content
