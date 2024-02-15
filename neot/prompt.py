@@ -1,3 +1,4 @@
+import enum
 import os
 from typing import Optional, Union, List
 
@@ -125,9 +126,40 @@ class RandomExampleSelector(ExampleSelector):
             return eg
 
 
-def icl(eval_set, icl_set, n_icl: int = 5, seed: int = 0, **kwargs):
+class DomainExampleSelector(ExampleSelector):
+    def __init__(self, icl_set):
+        super().__init__(icl_set)
+        domains = {}
+        for item in self.icl_set:
+            item_domains = item.get("Dom") if item.get("Dom") is not None else [None]
+            for domain in item_domains:
+                domains.setdefault(domain, [])
+                domains[domain].append(item)
+        for domain, domain_icl_set in domains.items():
+            domains[domain] = infinite_random_data(domain_icl_set)
+        self.domains = domains
+        self.fallback = infinite_random_data(self.icl_set)
+
+    def __next__(self):
+        # note this gives oracle domain -> should be considered oracle/topline
+        domain = self.item.get("Dom")
+        if domain is not None:
+            domain = np.random.choice(domain)
+        for eg in self.domains.get(domain, self.fallback):
+            # do not use self in the prompt (may happen if using eval_set as icl_set)
+            if eg["id"] == self.item["id"]:
+                continue
+            return eg
+
+
+class ExampleSelectors(enum.Enum):
+    random = RandomExampleSelector
+    domain = DomainExampleSelector
+
+
+def icl(eval_set, icl_set, n_icl: int = 5, seed: int = 0, selector: ExampleSelectors = "random", **kwargs):
     np.random.seed(seed)
-    icl_gen = RandomExampleSelector(icl_set)
+    icl_gen = selector.value(icl_set)
     for item in eval_set:
         icl_eg = []
         for _, eg in zip(range(n_icl), icl_gen(item)):
@@ -201,17 +233,19 @@ class PromptKwargs:
     template_lang: Union[str, List[str]] = "fr"
     def_lang: str = "fr"
     template_form: Union[str, List[str]] = "term"
+    selector: ExampleSelectors = "random"
 
 
 def prompt(eval_set, icl_set, model, tokenizer, data_collator, seed: int = 0, src: str = "en", tgt: str = "fr",
-           n_icl: int = 5, template_lang: str = "fr", def_lang: str = "fr", template_form: str = "term", device="cuda",
-           data_kwargs: DataKwargs = DataKwargs(), gen_kwargs: GenKwargs = GenKwargs(), output_path: Path = None):
+           n_icl: int = 5, template_lang: str = "fr", def_lang: str = "fr", template_form: str = "term",
+           selector: ExampleSelectors = "random", device="cuda", data_kwargs: DataKwargs = DataKwargs(),
+           gen_kwargs: GenKwargs = GenKwargs(), output_path: Path = None):
     preproc = Preprocessor(tgt)
     src_lang = LANGUAGES[template_lang][src]
     tgt_lang = LANGUAGES[template_lang][tgt]
     template = PROMPTS[template_lang][template_form]
     icl(eval_set, icl_set, n_icl=n_icl, seed=seed, src_lang=src_lang, tgt_lang=tgt_lang, template=template, src=src,
-        tgt=tgt, def_lang=def_lang)
+        tgt=tgt, def_lang=def_lang, selector=selector)
 
     eval_set = DataLoader(eval_set, collate_fn=data_collator.collate_fn, **asdict(data_kwargs))
     output = evaluate(eval_set, model, tokenizer, gen_kwargs=asdict(gen_kwargs), preproc=preproc,
