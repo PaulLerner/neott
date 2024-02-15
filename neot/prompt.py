@@ -97,32 +97,41 @@ def fill_template(item, template, icl=False, src="en", tgt="fr", src_lang="angla
                            src_def=item[def_lang]["def"]["text"])
 
 
-def icl(eval_set, icl_set, n_icl: int = 5, seed: int = 0, **kwargs):
-    # less pythonic way of randomly looping through icl_set:
-    # indices = np.arange(len(icl_set))
-    # np.random.shuffle(indices)
-    # i = 0
-    # for item in eval_set:
-    #     icl_eg = []
-    #     for _ in range(n_icl):
-    #         icl_eg.append(fill_template(icl_set[indices[i]], icl=True, **kwargs))
-    #         i += 1
-    #         if i >= indices.shape[0]:
-    #             np.random.shuffle(indices)
-    #             i = 0
+class ExampleSelector:
+    def __init__(self, icl_set):
+        self.icl_set = icl_set
 
+    def __call__(self, item):
+        self.item = item
+        return self
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        raise NotImplementedError()
+
+
+class RandomExampleSelector(ExampleSelector):
+    def __init__(self, icl_set):
+        super().__init__(icl_set)
+        self.icl_set = infinite_random_data(self.icl_set)
+
+    def __next__(self):
+        for eg in self.icl_set:
+            # do not use self in the prompt (may happen if using eval_set as icl_set)
+            if eg["id"] == self.item["id"]:
+                continue
+            return eg
+
+
+def icl(eval_set, icl_set, n_icl: int = 5, seed: int = 0, **kwargs):
     np.random.seed(seed)
-    icl_gen = infinite_random_data(icl_set)
+    icl_gen = RandomExampleSelector(icl_set)
     for item in eval_set:
         icl_eg = []
-        i = 0
-        while i < n_icl:
-            eg = next(icl_gen)
-            # do not use self in the prompt (may happen if using eval_set as icl_set)
-            if eg["id"] == item["id"]:
-                continue
+        for _, eg in zip(range(n_icl), icl_gen(item)):
             icl_eg.append(fill_template(eg, icl=True, **kwargs))
-            i += 1
         icl_eg.append(fill_template(item, icl=False, **kwargs))
         item["input_text"] = f" {ICL_SEP} ".join(icl_eg)
 
