@@ -99,45 +99,50 @@ def fill_template(item, template, icl=False, src="en", tgt="fr", src_lang="angla
 
 
 class ExampleSelector:
-    def __init__(self, icl_set):
+    def __init__(self, icl_set, n_icl: int = 5):
         self.icl_set = icl_set
-
-    def __call__(self, item):
-        self.item = item
-        return self
-
-    def __iter__(self):
-        return self
+        self.n_icl = n_icl
+        self.i = 0
 
     def __next__(self):
-        raise NotImplementedError()
+        raise NotImplementedError("subclass and implement")
+
+    def __call__(self, item):
+        self.i = 0
+        self.item = item
+        while self.i < self.n_icl:
+            eg = next(self)
+            # do not use self in the prompt (may happen if using eval_set as icl_set)
+            if eg["id"] == item["id"]:
+                continue
+            self.i += 1
+            yield eg
 
 
 class RandomExampleSelector(ExampleSelector):
-    def __init__(self, icl_set):
-        super().__init__(icl_set)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.icl_set = infinite_random_data(self.icl_set)
 
     def __next__(self):
-        for eg in self.icl_set:
-            # do not use self in the prompt (may happen if using eval_set as icl_set)
-            if eg["id"] == self.item["id"]:
-                continue
-            return eg
+        return next(self.icl_set)
 
 
 class DomainExampleSelector(ExampleSelector):
-    def __init__(self, icl_set):
-        super().__init__(icl_set)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         domains = {}
         for item in self.icl_set:
             item_domains = item.get("Dom") if item.get("Dom") is not None else [None]
             for domain in item_domains:
                 domains.setdefault(domain, [])
                 domains[domain].append(item)
+        domain_sizes = {}
         for domain, domain_icl_set in domains.items():
+            domain_sizes[domain] = len(domain_icl_set)
             domains[domain] = infinite_random_data(domain_icl_set)
         self.domains = domains
+        self.domain_sizes = domain_sizes
         self.fallback = infinite_random_data(self.icl_set)
 
     def __next__(self):
@@ -145,7 +150,13 @@ class DomainExampleSelector(ExampleSelector):
         domain = self.item.get("Dom")
         if domain is not None:
             domain = np.random.choice(domain)
-        for eg in self.domains.get(domain, self.fallback):
+        # you do not want to have always the same example in the prompt for domains with fewer examples than n_icl
+        if domain is not None and self.i < self.domain_sizes.get(domain, 0):
+            return next(self.domains[domain])
+        return next(self.fallback)
+    def __next__(self):
+        morph = tuple(sorted(self.item[self.lang]['morph_label']))
+        for eg in self.morphs[morph]:
             # do not use self in the prompt (may happen if using eval_set as icl_set)
             if eg["id"] == self.item["id"]:
                 continue
@@ -159,11 +170,9 @@ class ExampleSelectors(enum.Enum):
 
 def icl(eval_set, icl_set, n_icl: int = 5, seed: int = 0, selector: ExampleSelectors = "random", **kwargs):
     np.random.seed(seed)
-    icl_gen = selector.value(icl_set)
+    icl_gen = selector.value(icl_set, n_icl=n_icl)
     for item in eval_set:
-        icl_eg = []
-        for _, eg in zip(range(n_icl), icl_gen(item)):
-            icl_eg.append(fill_template(eg, icl=True, **kwargs))
+        icl_eg = [fill_template(eg, icl=True, **kwargs) for eg in icl_gen(item)]
         icl_eg.append(fill_template(item, icl=False, **kwargs))
         item["input_text"] = f" {ICL_SEP} ".join(icl_eg)
 
