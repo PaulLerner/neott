@@ -346,11 +346,12 @@ def main(data_path: str, eval_set: str = "dev", icl_set: str = "train", prompt_k
             metrics = prompt(eval_set, icl_set, model, tokenizer, data_collator, **asdict(prompt_kwargs),
                              device=model_kwargs.device_map, data_kwargs=data_kwargs, gen_kwargs=gen_kwargs,
                              output_path=output_path)
-            metrics.update({"template_lang": template_lang, "template_form": template_form})
+            metrics.update(asdict(prompt_kwargs))
             results.append(metrics)
     print(results)
     if output_path is not None:
-        pd.DataFrame(results).to_csv(output_path / "results.csv")
+        mode = "a" if (output_path / "results.csv").exists() else "w"
+        pd.DataFrame(results).to_csv(output_path / "results.csv", mode=mode)
 
 
 if __name__ == "__main__":
