@@ -15,6 +15,7 @@ import spacy
 
 from ..utils import Path
 from ..morph.labels import MorphLabel
+from ..morph.classif import Classifier
 
 
 def viz_f1(data, pred, metrics):
@@ -36,19 +37,30 @@ def dist_f1(metrics, output):
     fig.savefig(output / "f1_dist.pdf")
 
 
-def gather_results(data, metrics, tokenizer):
+def gather_results(data, metrics, tokenizer, predictions, morpher):
     results = []
 
     fr_ova = {c.name: {True: [], False: []} for c in MorphLabel}
     en_ova = {c.name: {True: [], False: []} for c in MorphLabel}
+    tps = Counter({c.name: 0 for c in MorphLabel})
+    pps, cps = tps.copy(), tps.copy()
+
     per_dom = []
     for i, item in enumerate(data):
         p_fr = item["fr"]["morph_label"]
         p_en = item["en"]["morph_label"]
+        pred = predictions[i][0].split("\n")[0]
+        cps += Counter(p_fr)
         em = metrics["ems"][i]
         for label in MorphLabel:
             fr_ova[label.name][label.name in p_fr].append(em)
             en_ova[label.name][label.name in p_en].append(em)
+            if morpher is not None:
+                labels = morpher(pred)
+                if label.name in labels:
+                    pps[label.name] += 1
+                    if label.name in p_fr:
+                        tps[label.name] += 1
         if tokenizer is not None:
             term_fertility = len(tokenizer.tokenize(item['fr']["text"]))
             token_fertility = []
@@ -71,7 +83,14 @@ def gather_results(data, metrics, tokenizer):
 
     results = pd.DataFrame(results)
     per_dom = pd.DataFrame(per_dom)
-
+    metrics_per_label = {}
+    for k, v in tps.items():
+        metrics_per_label[k] = {"precision": v / pps[k] if pps[k] > 0 else 0.0,
+                                "recall": v / cps[k] if cps[k] > 0 else 0.0}
+    metrics_per_label = pd.DataFrame(metrics_per_label).T
+    metrics_per_label['f1'] = (2 * metrics_per_label['precision'] * metrics_per_label['recall']) / (
+                metrics_per_label['precision'] + metrics_per_label['recall'])
+    print((metrics_per_label * 100).to_latex(float_format='%.1f'))
     for label in fr_ova:
         for label_exists in fr_ova[label]:
             fr_ova[label][label_exists] = sum(fr_ova[label][label_exists]) / len(fr_ova[label][label_exists])
@@ -123,7 +142,7 @@ def tag(pred, tagger):
 
 
 def main(data: Path, pred_path: Path, tokenizer: str = None, output: Path = None, tagger: str = None,
-         subset: str = "test"):
+         subset: str = "test", morpher: str = None, lang: str = "fr"):
     with open(data, "rt") as file:
         data = json.load(file)
 
@@ -139,10 +158,17 @@ def main(data: Path, pred_path: Path, tokenizer: str = None, output: Path = None
     if tokenizer is not None:
         tokenizer = AutoTokenizer.from_pretrained(tokenizer, add_prefix_space=True)
 
+    if morpher is not None:
+        morpher = Classifier(morpher, lang)
+
     metrics = pred["metrics"]
+    for k, v in metrics.items():
+        if isinstance(v, float):
+            print(k, v)
+    predictions = pred["predictions"]
     viz_f1(data[subset], pred, metrics)
     viz_wrong(data[subset], pred, metrics)
-    results, per_dom, fr_ova, en_ova = gather_results(data[subset], metrics, tokenizer)
+    results, per_dom, fr_ova, en_ova = gather_results(data[subset], metrics, tokenizer, predictions, morpher)
     viz_ova(fr_ova, en_ova)
     if output is not None:
         output.mkdir(exist_ok=True)
