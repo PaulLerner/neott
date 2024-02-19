@@ -12,8 +12,9 @@ import numpy as np
 from torch.utils.data import DataLoader
 from transformers import AutoModelForCausalLM, PretrainedConfig, AutoTokenizer
 
-from .utils import infinite_random_data, Path, ListOrArg
+from .utils import infinite_random_data, all_size_combination, Path, ListOrArg
 from .metrics import compute_metrics, Preprocessor
+from .morph.labels import MorphLabel
 
 ICL_SEP = "###"
 PROMPTS = {
@@ -99,7 +100,7 @@ def fill_template(item, template, icl=False, src="en", tgt="fr", src_lang="angla
 
 
 class ExampleSelector:
-    def __init__(self, icl_set, n_icl: int = 5):
+    def __init__(self, icl_set, n_icl: int = 5, **kwargs):
         self.icl_set = icl_set
         self.n_icl = n_icl
         self.i = 0
@@ -152,25 +153,74 @@ class DomainExampleSelector(ExampleSelector):
             domain = np.random.choice(domain)
         # you do not want to have always the same example in the prompt for domains with fewer examples than n_icl
         if domain is not None and self.i < self.domain_sizes.get(domain, 0):
-            return next(self.domains[domain])
-        return next(self.fallback)
-    def __next__(self):
-        morph = tuple(sorted(self.item[self.lang]['morph_label']))
-        for eg in self.morphs[morph]:
-            # do not use self in the prompt (may happen if using eval_set as icl_set)
-            if eg["id"] == self.item["id"]:
+            eg = next(self.domains[domain])
+        else:
+            eg = next(self.fallback)
+        return eg
+
+
+class MorphExampleSelector(ExampleSelector):
+    """
+    Parameters
+    ----------
+    morph_lang: str
+        Language to which retrieve morphologically similar examples.
+        E.g. when translating from EN to FR, you might want to get:
+        - morphologically similar EN examples (source-similar)
+        - morphologically similar FR examples (target-similar)
+    """
+
+    def __init__(self, *args, morph_lang: str = "fr", **kwargs):
+        super().__init__(*args, **kwargs)
+        self.lang = morph_lang
+        morphs = {}
+        for item in self.icl_set:
+            morph = tuple(sorted(MorphLabel[l].value for l in item[self.lang]['morph_label']))
+            morphs.setdefault(morph, [])
+            morphs[morph].append(item)
+
+        infinite_morphs = {}
+        # should have at least n_icl examples for each possible case
+        for m_o in all_size_combination(range(len(MorphLabel))):
+            # easy: exact match
+            if len(morphs.get(m_o, [])) >= self.n_icl:
+                infinite_morphs[m_o] = morphs[m_o]
                 continue
-            return eg
+            # more difficult: find closest morph (e.g. only 1 difference)
+            infinite_morphs[m_o] = []
+            sym_diffs = {}
+            for m_i in all_size_combination(range(len(MorphLabel))):
+                sym_diff = len(set(m_o).symmetric_difference(set(m_i)))
+                sym_diffs.setdefault(sym_diff, [])
+                sym_diffs[sym_diff].append(m_i)
+            # maximum symmetric difference is at most |MorphLabel|
+            for diff in range(len(MorphLabel)):
+                # all equally close morph get the same chance
+                for m_i in sym_diffs[diff]:
+                    infinite_morphs[m_o] += morphs.get(m_i, [])
+                if len(infinite_morphs[m_o]) >= self.n_icl:
+                    break
+
+        # done. here we simply turn potentially small sets in infinite loops
+        for morph, morph_icl_set in infinite_morphs.items():
+            infinite_morphs[morph] = infinite_random_data(morph_icl_set)
+        self.infinite_morphs = infinite_morphs
+
+    def __next__(self):
+        morph = tuple(sorted(MorphLabel[l].value for l in self.item[self.lang]['morph_label']))
+        return next(self.infinite_morphs[morph])
 
 
 class ExampleSelectors(enum.Enum):
     random = RandomExampleSelector
     domain = DomainExampleSelector
+    morph = MorphExampleSelector
 
 
-def icl(eval_set, icl_set, n_icl: int = 5, seed: int = 0, selector: ExampleSelectors = "random", **kwargs):
+def icl(eval_set, icl_set, n_icl: int = 5, seed: int = 0, selector: ExampleSelectors = "random", morph_lang: str = "fr",
+        **kwargs):
     np.random.seed(seed)
-    icl_gen = selector.value(icl_set, n_icl=n_icl)
+    icl_gen = selector.value(icl_set, n_icl=n_icl, morph_lang=morph_lang)
     for item in eval_set:
         icl_eg = [fill_template(eg, icl=True, **kwargs) for eg in icl_gen(item)]
         icl_eg.append(fill_template(item, icl=False, **kwargs))
@@ -243,19 +293,18 @@ class PromptKwargs:
     def_lang: str = "fr"
     template_form: Union[str, List[str]] = "term"
     selector: ExampleSelectors = "random"
+    morph_lang: str = "fr"
 
 
-def prompt(eval_set, icl_set, model, tokenizer, data_collator, seed: int = 0, src: str = "en", tgt: str = "fr",
-           n_icl: int = 5, template_lang: str = "fr", def_lang: str = "fr", template_form: str = "term",
-           selector: ExampleSelectors = "random", device="cuda", data_kwargs: DataKwargs = DataKwargs(),
-           gen_kwargs: GenKwargs = GenKwargs(), output_path: Path = None):
+def prompt(eval_set, icl_set, model, tokenizer, data_collator, src: str = "en", tgt: str = "fr",
+           template_lang: str = "fr", template_form: str = "term", device="cuda",
+           data_kwargs: DataKwargs = DataKwargs(), gen_kwargs: GenKwargs = GenKwargs(), output_path: Path = None,
+           **kwargs):
     preproc = Preprocessor(tgt)
     src_lang = LANGUAGES[template_lang][src]
     tgt_lang = LANGUAGES[template_lang][tgt]
     template = PROMPTS[template_lang][template_form]
-    icl(eval_set, icl_set, n_icl=n_icl, seed=seed, src_lang=src_lang, tgt_lang=tgt_lang, template=template, src=src,
-        tgt=tgt, def_lang=def_lang, selector=selector)
-
+    icl(eval_set, icl_set, src_lang=src_lang, tgt_lang=tgt_lang, template=template, src=src, tgt=tgt, **kwargs)
     eval_set = DataLoader(eval_set, collate_fn=data_collator.collate_fn, **asdict(data_kwargs))
     output = evaluate(eval_set, model, tokenizer, gen_kwargs=asdict(gen_kwargs), preproc=preproc,
                       device=device)

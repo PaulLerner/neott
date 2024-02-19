@@ -25,6 +25,12 @@ def infinite_random_data(data):
             yield data[i]
 
 
+def all_size_combination(iterable):
+    for r in range(len(iterable)+1):
+        for p in itertools.combinations(iterable, r):
+            yield p
+
+
 def iter_kwargs_prod(kwargs):
     for values in itertools.product(*kwargs.values()):
         k_v = {}
