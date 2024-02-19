@@ -9,6 +9,9 @@ from jsonargparse import CLI
 
 import seaborn as sns
 
+from spacy.lang.en import English
+from spacy.lang.fr import French
+
 import fasttext
 
 from ..utils import Path
@@ -17,8 +20,9 @@ from .labels import MorphLabel
 
 class Classifier:
     """Multi-label classifier for neologisms morphology"""
-    def __init__(self, model_path: str = None):
+    def __init__(self, model_path: str = None, lang: str = None):
         self.model = None if model_path is None else fasttext.load_model(model_path)
+        self.tokenizer = {"en": English, "fr": French}[lang]()
 
     def train(self, train_path: Path, dev_path: Path, test_path: Path = None):
         """Train"""
@@ -59,6 +63,12 @@ class Classifier:
         fig.savefig(test_path.parent / "p_v_r.pdf")
         return fig
 
+    def __call__(self, text):
+        label = [l[len('__label__'):] for l in self.model.predict(text, k=-1, threshold=0.5)[0]]
+        if len(self.tokenizer(text)) > 1:
+            label.append(MorphLabel.Syntagm.name)
+        return label
+
     def predict(self, predict_path: Path, lang: str):
         """Predict on OOD data"""
         with open(predict_path, 'rt') as file:
@@ -66,9 +76,7 @@ class Classifier:
         labels, multi_labels = Counter(), Counter()
         for subset in data.values():
             for item in subset:
-                label = [l[len('__label__'):] for l in self.model.predict(item[lang]['text'], k=-1, threshold=0.5)[0]]
-                if len(item[lang]["tokens"]) > 1:
-                    label.append(MorphLabel.Syntagm.name)
+                label = self(item[lang]['text'])
                 item[lang]["morph_label"] = label
                 labels += Counter(label)
                 multi_labels[" ".join(sorted(label))] += 1
