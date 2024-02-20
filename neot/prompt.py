@@ -211,19 +211,35 @@ class MorphExampleSelector(ExampleSelector):
         return next(self.infinite_morphs[morph])
 
 
-class ExampleSelectors(enum.Enum):
-    random = RandomExampleSelector
-    domain = DomainExampleSelector
-    morph = MorphExampleSelector
+class ConstrainedMorphExampleSelector(MorphExampleSelector):
+    def __init__(self, *args, morph: str = None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.morph = MorphLabel[morph].name
+        morphs = []
+        for item in self.icl_set:
+            for label in item[self.lang]['morph_label']:
+                if label == self.morph:
+                    morphs.append(item)
+        self.morphs = infinite_random_data(morphs)
+
+    def __next__(self):
+        return next(self.morphs)
 
 
-def icl(eval_set, icl_set, n_icl: int = 5, seed: int = 0, selector: ExampleSelectors = "random", morph_lang: str = "fr",
-        **kwargs):
+ExampleSelectors = dict(
+    random=RandomExampleSelector,
+    domain=DomainExampleSelector,
+    morph=MorphExampleSelector,
+    cmorph=ConstrainedMorphExampleSelector
+)
+
+
+def icl(eval_set, icl_set, template_kwargs, seed: int = 0, selector: str = "random", **kwargs):
     np.random.seed(seed)
-    icl_gen = selector.value(icl_set, n_icl=n_icl, morph_lang=morph_lang)
+    icl_gen = ExampleSelectors[selector](icl_set, **kwargs)
     for item in eval_set:
-        icl_eg = [fill_template(eg, icl=True, **kwargs) for eg in icl_gen(item)]
-        icl_eg.append(fill_template(item, icl=False, **kwargs))
+        icl_eg = [fill_template(eg, icl=True, **template_kwargs) for eg in icl_gen(item)]
+        icl_eg.append(fill_template(item, icl=False, **template_kwargs))
         item["input_text"] = f" {ICL_SEP} ".join(icl_eg)
 
 
@@ -292,19 +308,21 @@ class PromptKwargs:
     template_lang: Union[str, List[str]] = "fr"
     def_lang: str = "fr"
     template_form: Union[str, List[str]] = "term"
-    selector: ExampleSelectors = "random"
+    selector: str = "random"
     morph_lang: str = "fr"
+    morph: str = None
 
 
 def prompt(eval_set, icl_set, model, tokenizer, data_collator, src: str = "en", tgt: str = "fr",
-           template_lang: str = "fr", template_form: str = "term", device="cuda",
+           template_lang: str = "fr", template_form: str = "term", device="cuda", def_lang: str = "fr",
            data_kwargs: DataKwargs = DataKwargs(), gen_kwargs: GenKwargs = GenKwargs(), output_path: Path = None,
            **kwargs):
     preproc = Preprocessor(tgt)
     src_lang = LANGUAGES[template_lang][src]
     tgt_lang = LANGUAGES[template_lang][tgt]
     template = PROMPTS[template_lang][template_form]
-    icl(eval_set, icl_set, src_lang=src_lang, tgt_lang=tgt_lang, template=template, src=src, tgt=tgt, **kwargs)
+    template_kwargs = dict(src_lang=src_lang, tgt_lang=tgt_lang, template=template, src=src, tgt=tgt, def_lang=def_lang)
+    icl(eval_set, icl_set, template_kwargs, **kwargs)
     eval_set = DataLoader(eval_set, collate_fn=data_collator.collate_fn, **asdict(data_kwargs))
     output = evaluate(eval_set, model, tokenizer, gen_kwargs=asdict(gen_kwargs), preproc=preproc,
                       device=device)
@@ -314,8 +332,11 @@ def prompt(eval_set, icl_set, model, tokenizer, data_collator, src: str = "en", 
             metrics[k] = v
     print(metrics)
     if output_path is not None:
-        with open(output_path / f"{template_lang}_{template_form}.json", 'wt') as file:
+        output["hyperparameters"] = dict(src=src, tgt=tgt, template_lang=template_lang, template_form=template_form,
+                                         **kwargs)
+        with open(output_path / f"output.json", 'at') as file:
             json.dump(output, file)
+            file.write("\n")
     return metrics
 
 
