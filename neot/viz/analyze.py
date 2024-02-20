@@ -49,7 +49,7 @@ def gather_results(data, metrics, tokenizer, predictions, morpher):
     for i, item in enumerate(data):
         p_fr = item["fr"]["morph_label"]
         p_en = item["en"]["morph_label"]
-        pred = predictions[i][0].split("\n")[0]
+        pred = predictions[i][0].split("\n")[0].strip()
         cps += Counter(p_fr)
         em = metrics["ems"][i]
         for label in MorphLabel:
