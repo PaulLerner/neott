@@ -12,7 +12,7 @@ import numpy as np
 from torch.utils.data import DataLoader
 from transformers import AutoModelForCausalLM, PretrainedConfig, AutoTokenizer
 
-from .utils import infinite_random_data, all_size_combination, Path, ListOrArg
+from .utils import infinite_random_data, all_size_combination, Path, ListOrArg, iter_kwargs_prod
 from .metrics import compute_metrics, Preprocessor
 from .morph.labels import MorphLabel
 
@@ -301,16 +301,16 @@ class DataCollator:
 
 @dataclass
 class PromptKwargs:
-    seed: int = 0
-    src: str = "en"
-    tgt: str = "fr"
-    n_icl: int = 5
+    seed: Union[int, List[int]] = 0
+    src: Union[str, List[str]] = "en"
+    tgt: Union[str, List[str]] = "fr"
+    n_icl: Union[int, List[int]] = 5
     template_lang: Union[str, List[str]] = "fr"
-    def_lang: str = "fr"
+    def_lang: Union[str, List[str]] = "fr"
     template_form: Union[str, List[str]] = "term"
-    selector: str = "random"
-    morph_lang: str = "fr"
-    morph: str = None
+    selector: Union[str, List[str]] = "random"
+    morph_lang: Union[str, List[str]] = "fr"
+    morph: Union[str, List[str]] = None
 
 
 def prompt(eval_set, icl_set, model, tokenizer, data_collator, src: str = "en", tgt: str = "fr",
@@ -332,8 +332,7 @@ def prompt(eval_set, icl_set, model, tokenizer, data_collator, src: str = "en", 
             metrics[k] = v
     print(metrics)
     if output_path is not None:
-        output["hyperparameters"] = dict(src=src, tgt=tgt, template_lang=template_lang, template_form=template_form,
-                                         **kwargs)
+        output["hyperparameters"] = template_kwargs | kwargs
         with open(output_path / f"output.json", 'at') as file:
             json.dump(output, file)
             file.write("\n")
@@ -356,19 +355,18 @@ def main(data_path: str, eval_set: str = "dev", icl_set: str = "train", prompt_k
         model = model.to(model_kwargs.device_map)
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, add_prefix_space=add_prefix_space)
     data_collator = DataCollator(tokenizer, tgt=prompt_kwargs.tgt, **asdict(tokenizer_kwargs))
-    template_langs = PROMPTS.keys() if prompt_kwargs.template_lang is None else ListOrArg(prompt_kwargs.template_lang)
-    search_templates = prompt_kwargs.template_form is None
+    prompt_kwargs = asdict(prompt_kwargs)
+    for k, v in prompt_kwargs.items():
+        prompt_kwargs[k] = ListOrArg(v)
     results = []
-    for template_lang in template_langs:
-        prompt_kwargs.template_lang = template_lang
-        template_forms = PROMPTS[template_lang].keys() if search_templates else ListOrArg(prompt_kwargs.template_form)
-        for template_form in template_forms:
-            prompt_kwargs.template_form = template_form
-            metrics = prompt(eval_set, icl_set, model, tokenizer, data_collator, **asdict(prompt_kwargs),
-                             device=model_kwargs.device_map, data_kwargs=data_kwargs, gen_kwargs=gen_kwargs,
-                             output_path=output_path)
-            metrics.update(asdict(prompt_kwargs))
-            results.append(metrics)
+    for kwarg in iter_kwargs_prod(prompt_kwargs):
+        if kwarg["template_form"] not in PROMPTS[kwarg["template_lang"]]:
+            continue
+        metrics = prompt(eval_set, icl_set, model, tokenizer, data_collator, **kwarg,
+                         device=model_kwargs.device_map, data_kwargs=data_kwargs, gen_kwargs=gen_kwargs,
+                         output_path=output_path)
+        metrics.update(kwarg)
+        results.append(metrics)
     print(results)
     if output_path is not None:
         mode = "a" if (output_path / "results.csv").exists() else "w"
