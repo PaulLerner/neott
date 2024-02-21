@@ -211,9 +211,10 @@ class MorphExampleSelector(ExampleSelector):
         return next(self.infinite_morphs[morph])
 
 
-class ConstrainedMorphExampleSelector(MorphExampleSelector):
-    def __init__(self, *args, morph: str = None, **kwargs):
+class ConstrainedMorphExampleSelector(ExampleSelector):
+    def __init__(self, *args, morph_lang: str = "fr", morph: str = None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.lang = morph_lang
         self.morph = MorphLabel[morph].name
         morphs = []
         for item in self.icl_set:
