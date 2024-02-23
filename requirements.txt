@@ -11,6 +11,9 @@ spacy==3.7.2
 tqdm==4.66.1
 transformers==4.36.2
 nltk==3.8.1
+accelerate==0.26.1
+bitsandbytes==0.42.0
+fasttext @ git+https://github.com/facebookresearch/fastText@b733943e84263f432fa47588643822194ee03dd1
 
 # pytorch: better use conda
 # conda install pytorch==2.1.1 torchvision==0.16.1 torchaudio==2.1.1 pytorch-cuda=11.8 -c pytorch -c nvidia
