@@ -3,6 +3,7 @@ import os
 from typing import Optional, Union, List
 
 import pandas as pd
+import torch
 from jsonargparse import CLI
 import json
 from dataclasses import dataclass, asdict
@@ -267,7 +268,6 @@ def evaluate(eval_set, model, tokenizer, gen_kwargs, preproc, device="cuda"):
         target_text = inputs.pop("target_text")
         for k, v in inputs.items():
             inputs[k] = v.to(device)
-        # TODO top-K hypothesis
         output = model.generate(eos_token_id=eos_token_id, return_dict_in_generate=True, **inputs,
                                 **gen_kwargs).sequences
         # keep only newly generated tokens
@@ -333,7 +333,7 @@ def prompt(eval_set, icl_set, model, tokenizer, data_collator, src: str = "en", 
             metrics[k] = v
     print(metrics)
     if output_path is not None:
-        output["hyperparameters"] = template_kwargs | kwargs
+        output["hyperparameters"] = dict(template_lang=template_lang, template_form=template_form) | template_kwargs | kwargs
         with open(output_path / f"output.json", 'at') as file:
             json.dump(output, file)
             file.write("\n")
@@ -354,6 +354,7 @@ def main(data_path: str, eval_set: str = "dev", icl_set: str = "train", prompt_k
     model = AutoModelForCausalLM.from_pretrained(**asdict(model_kwargs))
     if not model_kwargs.load_in_8bit:
         model = model.to(model_kwargs.device_map)
+    model = torch.compile(model)
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, add_prefix_space=add_prefix_space)
     data_collator = DataCollator(tokenizer, tgt=prompt_kwargs.tgt, **asdict(tokenizer_kwargs))
     prompt_kwargs = asdict(prompt_kwargs)
