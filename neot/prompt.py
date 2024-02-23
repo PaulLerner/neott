@@ -1,93 +1,19 @@
-import enum
-import os
-from typing import Optional, Union, List
-
 import pandas as pd
 import torch
 from jsonargparse import CLI
 import json
-from dataclasses import dataclass, asdict
+from dataclasses import asdict
 from tqdm import tqdm
 
 import numpy as np
 from torch.utils.data import DataLoader
-from transformers import AutoModelForCausalLM, PretrainedConfig, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from .utils import infinite_random_data, all_size_combination, Path, ListOrArg, iter_kwargs_prod
 from .metrics import compute_metrics, Preprocessor
 from .morph.labels import MorphLabel
-
-ICL_SEP = "###"
-PROMPTS = {
-    "en": {
-        # bawden and yvon
-        "version": "If the original version says {src_term} then the {tgt_lang} version should say:{tgt_term}",
-        # PL
-        "term": "The term {src_term} can be translated in {tgt_lang} as:{tgt_term}",
-        # bloomz (instruction)
-        "tatoeba_mt": "Translate the following term from {src_lang} to {tgt_lang} {src_term}:{tgt_term}"
-    },
-    "fr": {
-        # PL
-        "term": "Le terme {src_lang} {src_term} peut se traduire en {tgt_lang} par:{tgt_term}",
-        "def": "{src_def} définit le terme:{tgt_term}",
-        "def+term": "{src_def} définit le terme {src_lang} {src_term} qui peut se traduire en {tgt_lang} par:{tgt_term}",
-        # bloomz (instruction)
-        "tatoeba_mt": "Traduis le terme {src_lang} suivant en {tgt_lang} {src_term}:{tgt_term}"
-    }
-}
-LANGUAGES = {
-    "en": {"en": "English", "fr": "French"},
-    "fr": {"en": "anglais", "fr": "français"}
-}
-
-
-@dataclass
-class ModelKwargs:
-    pretrained_model_name_or_path: Optional[Union[str, os.PathLike]] = None
-    device_map: str = "cuda"
-    config: Optional[Union[PretrainedConfig, str, os.PathLike]] = None
-    cache_dir: Optional[Union[str, os.PathLike]] = None
-    ignore_mismatched_sizes: bool = False
-    force_download: bool = False
-    local_files_only: bool = False
-    token: Optional[Union[str, bool]] = None
-    revision: str = "main"
-    use_safetensors: bool = None
-    resume_download: bool = False
-    output_loading_info: bool = False
-    torch_dtype: str = None
-    load_in_8bit: bool = False
-    load_in_4bit: bool = False
-    use_flash_attention_2: bool = False
-
-
-@dataclass
-class DataKwargs:
-    batch_size: Optional[int] = 1
-    shuffle: Optional[bool] = False
-    num_workers: int = 0
-    pin_memory: bool = False
-    drop_last: bool = False
-    timeout: float = 0
-    prefetch_factor: Optional[int] = None
-    persistent_workers: bool = False
-    pin_memory_device: str = ""
-
-
-@dataclass
-class TokenizerKwargs:
-    return_tensors: str = 'pt'
-    padding: str = 'longest'
-    truncation: bool = False
-    return_overflowing_tokens: bool = False
-
-
-@dataclass
-class GenKwargs:
-    num_beams: int = 4
-    max_new_tokens: int = 64
-    num_return_sequences: int = 1
+from .trainee import ModelKwargs, GenKwargs
+from .data.train import TokenizerKwargs, DataKwargs, PromptKwargs, PROMPTS, ICL_SEP, LANGUAGES
 
 
 def fill_template(item, template, icl=False, src="en", tgt="fr", src_lang="anglais", tgt_lang="français",
@@ -298,20 +224,6 @@ class DataCollator:
         inputs = self.tokenizer([item["input_text"] for item in items], **self.kwargs)
         inputs["target_text"] = [item[self.tgt]["text"] for item in items]
         return inputs
-
-
-@dataclass
-class PromptKwargs:
-    seed: Union[int, List[int]] = 0
-    src: Union[str, List[str]] = "en"
-    tgt: Union[str, List[str]] = "fr"
-    n_icl: Union[int, List[int]] = 5
-    template_lang: Union[str, List[str]] = "fr"
-    def_lang: Union[str, List[str]] = "fr"
-    template_form: Union[str, List[str]] = "term"
-    selector: Union[str, List[str]] = "random"
-    morph_lang: Union[str, List[str]] = "fr"
-    morph: Union[str, List[str]] = None
 
 
 def prompt(eval_set, icl_set, model, tokenizer, data_collator, src: str = "en", tgt: str = "fr",
