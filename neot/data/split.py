@@ -26,4 +26,4 @@ def split(data_path: str, test_ratio: float = 0.5, dev_ratio: float = None):
 
 
 if __name__ == "__main__":
-    CLI(main, description=main.__doc__)
+    CLI(split, description=split.__doc__)
