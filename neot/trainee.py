@@ -95,14 +95,11 @@ class Trainee(pl.LightningModule):
         self.loss_fct = CrossEntropyLoss()
 
     def step(self, batch, batch_idx):
-        prompt_len = batch.pop("prompt_len")
-        # there should be at least one token (e.g. <BOS>) in the prompt
-        assert prompt_len > 0
-        logits = self.model(**batch)
-        # FIXME only works with left-padding
-        # compute loss on generated tokens only: there's one token shift between input and output (causal LM)
-        logits = logits[:, prompt_len - 1:].contiguous()
-        labels = batch["input_ids"][:, prompt_len:].contiguous()
+        labels = batch.pop("labels")
+        logits = self.model(**batch, return_dict=True).logits
+        # there's one token shift between input and output (causal LM)
+        logits = logits[:, :-1].contiguous().view(-1, self.model.config.vocab_size)
+        labels = labels[:, 1:].contiguous().view(-1)
         loss = self.loss_fct(logits, labels)
         return dict(loss=loss, logits=logits)
 

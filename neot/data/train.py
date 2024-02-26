@@ -14,19 +14,19 @@ ICL_SEP = "###"
 PROMPTS = {
     "en": {
         # bawden and yvon
-        "version": "If the original version says {src_term} then the {tgt_lang} version should say:{tgt_term}",
+        "version": "If the original version says {src_term} then the {tgt_lang} version should say :{tgt_term}",
         # PL
-        "term": "The term {src_term} can be translated in {tgt_lang} as:{tgt_term}",
+        "term": "The term {src_term} can be translated in {tgt_lang} as :{tgt_term}",
         # bloomz (instruction)
-        "tatoeba_mt": "Translate the following term from {src_lang} to {tgt_lang} {src_term}:{tgt_term}"
+        "tatoeba_mt": "Translate the following term from {src_lang} to {tgt_lang} {src_term} :{tgt_term}"
     },
     "fr": {
         # PL
-        "term": "Le terme {src_lang} {src_term} peut se traduire en {tgt_lang} par:{tgt_term}",
-        "def": "{src_def} définit le terme:{tgt_term}",
-        "def+term": "{src_def} définit le terme {src_lang} {src_term} qui peut se traduire en {tgt_lang} par:{tgt_term}",
+        "term": "Le terme {src_lang} {src_term} peut se traduire en {tgt_lang} par :{tgt_term}",
+        "def": "{src_def} définit le terme :{tgt_term}",
+        "def+term": "{src_def} définit le terme {src_lang} {src_term} qui peut se traduire en {tgt_lang} par :{tgt_term}",
         # bloomz (instruction)
-        "tatoeba_mt": "Traduis le terme {src_lang} suivant en {tgt_lang} {src_term}:{tgt_term}"
+        "tatoeba_mt": "Traduis le terme {src_lang} suivant en {tgt_lang} {src_term} :{tgt_term}"
     }
 }
 LANGUAGES = {
@@ -75,6 +75,10 @@ class DataModule(pl.LightningDataModule):
                  prompt_kwargs: PromptKwargs = PromptKwargs(), filter_def: str = None):
         super().__init__()
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, add_prefix_space=add_prefix_space)
+        assert self.tokenizer.padding_side == 'left'
+        prompt_sep = self.tokenizer.encode(':', add_special_tokens=False)
+        assert len(prompt_sep) == 1, prompt_sep
+        self.prompt_sep = prompt_sep[0]
         self.tokenizer_kwargs = asdict(tokenizer_kwargs)
         self.data_path = data_path
         self.dataset = {}
@@ -91,17 +95,18 @@ class DataModule(pl.LightningDataModule):
             self.dataset = json.load(file)
         for name, subset in self.dataset.items():
             for item in subset:
-                item["input_text"] = self.template.format(tgt_term="",
+                item["input_text"] = self.template.format(tgt_term=" " + item[self.prompt_kwargs.tgt]["text"],
                                                           src_lang=self.src_lang, tgt_lang=self.tgt_lang,
                                                           src_term=item[self.prompt_kwargs.src]["text"],
                                                           src_def=item[self.prompt_kwargs.def_lang]["def"]["text"])
-
 
     def train_dataloader(self):
         if 'train' not in self.dataset:
             return None
         if self.filter_def is not None:
+            before = len(self.dataset['train'])
             self.dataset['train'] = [item for item in self.dataset['train'] if item[self.filter_def]['def']['text']]
+            print(f"filtered training set from {before} to {len(self.dataset['train'])} with {self.filter_def} definitions")
         return DataLoader(
             self.dataset['train'],
             collate_fn=self.collate_fn,
@@ -130,7 +135,10 @@ class DataModule(pl.LightningDataModule):
         )
 
     def collate_fn(self, items):
-        # FIXME: should mask prompt or give index of each prompt to be able to compute loss in trainee
         inputs = self.tokenizer([item["input_text"] for item in items], **self.tokenizer_kwargs)
-        item["target_text"] = [item[self.prompt_kwargs.tgt]["text"] for item in items]
+        labels = inputs['input_ids'].clone()
+        for label in labels:
+            first_where = (label == self.prompt_sep).nonzero()[0, 0]
+            label[: first_where + 1] = self.trainer.lightning_module.loss_fct.ignore_index
+        inputs["labels"] = labels
         return inputs
