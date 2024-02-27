@@ -67,6 +67,7 @@ class TokenizerKwargs:
     padding: str = 'longest'
     truncation: bool = False
     return_overflowing_tokens: bool = False
+    max_length: int = None
 
 
 class DataModule(pl.LightningDataModule):
@@ -138,7 +139,12 @@ class DataModule(pl.LightningDataModule):
         inputs = self.tokenizer([item["input_text"] for item in items], **self.tokenizer_kwargs)
         labels = inputs['input_ids'].clone()
         for label in labels:
-            first_where = (label == self.prompt_sep).nonzero()[0, 0]
-            label[: first_where + 1] = self.trainer.lightning_module.loss_fct.ignore_index
+            where = (label == self.prompt_sep).nonzero()
+            # did not find prompt_sep in input (only legal if tokenizer truncates) -> mask the whole label
+            if where.shape[0] == 0:
+                where = label.shape[0] - 1
+            else:
+                where = where[0, 0]
+            label[: where + 1] = self.trainer.lightning_module.loss_fct.ignore_index
         inputs["labels"] = labels
         return inputs
