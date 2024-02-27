@@ -56,6 +56,7 @@ class PromptKwargs:
     template_lang: Union[str, List[str]] = "fr"
     def_lang: Union[str, List[str]] = "fr"
     template_form: Union[str, List[str]] = "term"
+    fallback_template: str = None
     selector: Union[str, List[str]] = "random"
     morph_lang: Union[str, List[str]] = "fr"
     morph: Union[str, List[str]] = None
@@ -100,6 +101,10 @@ class DataModule(pl.LightningDataModule):
         self.src_lang = LANGUAGES[prompt_kwargs.template_lang][prompt_kwargs.src]
         self.tgt_lang = LANGUAGES[prompt_kwargs.template_lang][prompt_kwargs.tgt]
         self.template = PROMPTS[prompt_kwargs.template_lang][prompt_kwargs.template_form]
+        if prompt_kwargs.fallback_template is not None:
+            self.fallback_template = PROMPTS[prompt_kwargs.template_lang][prompt_kwargs.fallback_template]
+        else:
+            self.fallback_template = None
         self.prompt_kwargs = prompt_kwargs
         self.filter_def = filter_def
         self.preproc = Preprocessor(prompt_kwargs.tgt)
@@ -116,8 +121,12 @@ class DataModule(pl.LightningDataModule):
             self.dataset['train'] = [item for item in self.dataset['train'] if item[self.filter_def]['def']['text']]
             print(f"filtered training set from {before} to {len(self.dataset['train'])} with {self.filter_def} definitions")
         for item in self.dataset["train"]:
+            if self.filter_def is None and self.fallback_template is not None and not item[self.prompt_kwargs.def_lang]['def']['text']:
+                template = self.fallback_template
+            else:
+                template = self.template
             # icl -> target is part of the input (to be causal-masked)
-            item["input_text"] = fill_template(item, self.template, icl=True, src=self.prompt_kwargs.src,
+            item["input_text"] = fill_template(item, template, icl=True, src=self.prompt_kwargs.src,
                                                tgt=self.prompt_kwargs.tgt, src_lang=self.src_lang,
                                                tgt_lang=self.tgt_lang, def_lang=self.prompt_kwargs.def_lang)
         return DataLoader(
