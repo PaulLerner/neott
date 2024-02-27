@@ -116,10 +116,10 @@ class DataModule(pl.LightningDataModule):
         )
 
     def val_dataloader(self):
-        if 'validation' not in self.dataset:
+        if 'dev' not in self.dataset:
             return None
         return DataLoader(
-            self.dataset['validation'],
+            self.dataset['dev'],
             collate_fn=self.collate_fn,
             shuffle=False,
             **self.data_kwargs
