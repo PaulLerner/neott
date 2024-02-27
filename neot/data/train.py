@@ -179,5 +179,6 @@ class DataModule(pl.LightningDataModule):
         """Keep target_text in batch. Does not try to cast them as Tensor of any dtype or device."""
         target_text = batch.pop('target_text', None)
         batch = super().transfer_batch_to_device(batch, device, dataloader_idx)
-        batch['target_text'] = target_text
+        if target_text is not None:
+            batch['target_text'] = target_text
         return batch
