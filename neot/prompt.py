@@ -13,17 +13,7 @@ from .utils import infinite_random_data, all_size_combination, Path, ListOrArg, 
 from .metrics import compute_metrics, Preprocessor
 from .morph.labels import MorphLabel
 from .trainee import ModelKwargs, GenKwargs
-from .data.train import TokenizerKwargs, DataKwargs, PromptKwargs, PROMPTS, ICL_SEP, LANGUAGES
-
-
-def fill_template(item, template, icl=False, src="en", tgt="fr", src_lang="anglais", tgt_lang="français",
-                  def_lang: str = "fr"):
-    if icl:
-        tgt_term = " " + item[tgt]["text"]
-    else:
-        tgt_term = ""
-    return template.format(tgt_term=tgt_term, src_lang=src_lang, tgt_lang=tgt_lang, src_term=item[src]["text"],
-                           src_def=item[def_lang]["def"]["text"])
+from .data.train import TokenizerKwargs, DataKwargs, PromptKwargs, PROMPTS, ICL_SEP, LANGUAGES, fill_template
 
 
 class ExampleSelector:
@@ -194,8 +184,8 @@ def evaluate(eval_set, model, tokenizer, gen_kwargs, preproc, device="cuda"):
         target_text = inputs.pop("target_text")
         for k, v in inputs.items():
             inputs[k] = v.to(device)
-        output = model.generate(eos_token_id=eos_token_id, return_dict_in_generate=True, **inputs,
-                                **gen_kwargs).sequences
+        output = model.generate(eos_token_id=eos_token_id, return_dict_in_generate=True,
+                                pad_token_id=tokenizer.pad_token_id, **inputs, **gen_kwargs).sequences
         # keep only newly generated tokens
         if tokenizer.padding_side == 'left':
             output = output[:, seq_len:]
@@ -236,7 +226,7 @@ def prompt(eval_set, icl_set, model, tokenizer, data_collator, src: str = "en", 
     template = PROMPTS[template_lang][template_form]
     template_kwargs = dict(src_lang=src_lang, tgt_lang=tgt_lang, template=template, src=src, tgt=tgt, def_lang=def_lang)
     icl(eval_set, icl_set, template_kwargs, **kwargs)
-    eval_set = DataLoader(eval_set, collate_fn=data_collator.collate_fn, **asdict(data_kwargs))
+    eval_set = DataLoader(eval_set, collate_fn=data_collator.collate_fn, shuffle=False, **asdict(data_kwargs))
     output = evaluate(eval_set, model, tokenizer, gen_kwargs=asdict(gen_kwargs), preproc=preproc,
                       device=device)
     metrics = {}

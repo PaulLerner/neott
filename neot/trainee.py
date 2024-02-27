@@ -14,6 +14,8 @@ from transformers import AutoModelForCausalLM, PretrainedConfig
 import pandas as pd
 import torch
 
+from neot.metrics import compute_metrics
+
 
 @dataclass
 class ModelKwargs:
@@ -68,18 +70,13 @@ class LinearLRWithWarmup(LambdaLR):
         )
 
 
-def to_latex(metrics):
-    table = pd.DataFrame([metrics]) * 100
-    return table.to_latex(float_format='%.1f')
-
-
 def batched_cpu(batch):
     return {k: (v.detach().cpu() if isinstance(v, torch.Tensor) else v) for k, v in batch.items()}
 
 
 class Trainee(pl.LightningModule):
     def __init__(self, *args, model_kwargs, gradient_checkpointing=False, warmup_steps=0, lr=2e-5, betas=(0.9, 0.999),
-                 eps=1e-08, weight_decay=0.0, output_cpu=False, gen_kwargs: GenKwargs = GenKwargs(), **kwargs):
+                 eps=1e-08, weight_decay=0.0, gen_kwargs: GenKwargs = GenKwargs(), **kwargs):
         super().__init__(*args, **kwargs)
         self.model = AutoModelForCausalLM.from_pretrained(**model_kwargs)
         # scheduling and optimization
@@ -89,23 +86,36 @@ class Trainee(pl.LightningModule):
         self.eps = eps
         self.weight_decay = weight_decay
         self.param_groups = self.parameters()
-        self.output_cpu = output_cpu
         if gradient_checkpointing:
             self.gradient_checkpointing_enable()
         self.loss_fct = CrossEntropyLoss()
+        self.gen_kwargs = asdict(gen_kwargs)
 
-    def step(self, batch, batch_idx):
+    def training_step(self, batch, batch_idx):
         labels = batch.pop("labels")
         logits = self.model(**batch, return_dict=True).logits
         # there's one token shift between input and output (causal LM)
         logits = logits[:, :-1].contiguous().view(-1, self.model.config.vocab_size)
         labels = labels[:, 1:].contiguous().view(-1)
         loss = self.loss_fct(logits, labels)
-        return dict(loss=loss, logits=logits)
+        self.log("train/loss", loss)
+        return dict(loss=loss)
 
     def eval_step(self, batch, batch_idx):
-        # TODO generate
-        return self.step(batch, batch_idx)
+        target_text = batch.pop("target_text")
+        batch_size, seq_len = batch["input_ids"].shape
+        output = self.model.generate(return_dict_in_generate=True,
+                                     pad_token_id=self.trainer.datamodule.tokenizer.pad_token_id,
+                                     **batch, **self.gen_kwargs).sequences
+        # keep only newly generated tokens
+        output = output[:, seq_len:]
+        predictions = self.trainer.datamodule.tokenizer.batch_decode(output, skip_special_tokens=True)
+        k = self.gen_kwargs["num_return_sequences"]
+        assert len(predictions) % k == 0
+        predictions_per_input = []
+        for i in range(0, len(predictions), k):
+            predictions_per_input.append(predictions[i: i + k])
+        return dict(predictions=predictions_per_input, targets=target_text)
 
     def log(self, name, value, **kwargs):
         """Ignores None values."""
@@ -113,47 +123,41 @@ class Trainee(pl.LightningModule):
             return None
         super().log(name, value, **kwargs)
 
-    def training_step(self, batch, batch_idx):
-        """Step and log training metrics"""
-        outputs = self.step(batch, batch_idx)
-        self.log("train/loss", outputs['loss'])
-        return outputs
-
     def validation_step(self, batch, batch_idx):
         """Step and log validation metrics"""
         outputs = self.eval_step(batch, batch_idx)
-        self.log("eval/loss", outputs['loss'])
-        if self.output_cpu:
-            return batched_cpu(outputs)
         return outputs
 
     def test_step(self, batch, batch_idx):
         """Step and log test metrics"""
         outputs = self.eval_step(batch, batch_idx)
-        self.log("test/loss", outputs['loss'])
-        if self.output_cpu:
-            return batched_cpu(outputs)
         return outputs
 
     def eval_epoch_end(self, eval_outputs):
-        warnings.warn("eval_epoch_end is not implemented.")
-        return {}
+        predictions, targets = [], []
+        for eval_output in eval_outputs:
+            predictions.extend(eval_output["predictions"])
+            targets.extend(eval_output["targets"])
+        metrics = compute_metrics(predictions, targets, self.trainer.datamodule.preproc,
+                                  k=self.gen_kwargs["num_return_sequences"])
+        return {'metrics': metrics, 'predictions': predictions}
 
     def validation_epoch_end(self, *args, **kwargs):
         """eval_epoch_end and log"""
         metrics = self.eval_epoch_end(*args, **kwargs)['metrics']
         for k, v in metrics.items():
-            self.log(f"eval/{k}", v)
+            if isinstance(v, float):
+                self.log(f"eval/{k}", v)
 
     def test_epoch_end(self, *args, **kwargs):
         """eval_epoch_end and log"""
-        metrics = self.eval_epoch_end(*args, **kwargs)['metrics']
-        print(to_latex(metrics))
+        output = self.eval_epoch_end(*args, **kwargs)
         log_dir = Path(self.trainer.log_dir)
-        for k, v in metrics.items():
-            self.log(f"test/{k}", v)
-        with open(log_dir / 'metrics.json', 'wt') as file:
-            json.dump(metrics, file)
+        for k, v in output['metrics'].items():
+            if isinstance(v, float):
+                self.log(f"test/{k}", v)
+        with open(log_dir / 'output.json', 'wt') as file:
+            json.dump(output, file)
 
     def configure_optimizers(self):
         """Prepare optimizer and schedule (linear warmup and decay)"""
