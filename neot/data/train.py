@@ -88,7 +88,8 @@ class DataModule(pl.LightningDataModule):
                  add_prefix_space: bool = False, data_path: str = None, data_kwargs: DataKwargs = DataKwargs(),
                  prompt_kwargs: PromptKwargs = PromptKwargs(), filter_def: str = None):
         super().__init__()
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, add_prefix_space=add_prefix_space)
+        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, add_prefix_space=add_prefix_space,
+                                                       add_eos_token=True)
         assert self.tokenizer.padding_side == 'left'
         prompt_sep = self.tokenizer.encode(':', add_special_tokens=False)
         assert len(prompt_sep) == 1, prompt_sep
@@ -166,6 +167,7 @@ class DataModule(pl.LightningDataModule):
         )
 
     def train_collate_fn(self, items):
+        self.tokenizer.add_eos_token = True
         inputs = self.tokenizer([item["input_text"] for item in items], **self.tokenizer_kwargs)
         labels = inputs['input_ids'].clone()
         for label in labels:
@@ -180,6 +182,7 @@ class DataModule(pl.LightningDataModule):
         return inputs
 
     def eval_collate_fn(self, items):
+        self.tokenizer.add_eos_token = False
         inputs = self.tokenizer([item["input_text"] for item in items], **self.tokenizer_kwargs)
         inputs["target_text"] = [item[self.prompt_kwargs.tgt]["text"] for item in items]
         return inputs
