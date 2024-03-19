@@ -20,7 +20,6 @@ def get_data():
 
     triples = []
     for i, row in data.iterrows():
-        ident = row['URI'] if row['URI'] == row['URI'] else str(i)
         fr_terms = get_if_not_nan(row, "skos:altLabel@fr")
         fr_terms = fr_terms.split("##") if fr_terms is not None else None
         en_terms = get_if_not_nan(row, "skos:altLabel@en")
@@ -38,7 +37,7 @@ def get_data():
                 "def": {"text": get_if_not_nan(row, "skos:definition@en")},
                 "syn": en_terms
             },
-            "id": ident
+            "id": row['URI'] if row['URI'] == row['URI'] else f"TAL_{i}"
         })
     return triples
 
