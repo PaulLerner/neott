@@ -7,7 +7,7 @@ import pandas as pd
 
 
 def get_data():
-    data = pd.read_csv("../data/TAL/terms/Terminologie_TAL/TerminologieTAL1.csv")
+    data = pd.read_csv("../data/TAL/terms/Terminologie_TAL/terminologie_tal_mars2024.csv", delimiter=";")
 
     data = data.dropna(subset=["skos:prefLabel@fr", "skos:prefLabel@en"])
 
@@ -25,7 +25,7 @@ def get_data():
         en_terms = get_if_not_nan(row, "skos:altLabel@en")
         en_terms = en_terms.split("##") if en_terms is not None else None
         triples.append({
-            "Dom": row.origine,
+            "Dom": None,
             "S-dom": None,
             "fr": {
                 "text": row["skos:prefLabel@fr"],
@@ -37,7 +37,7 @@ def get_data():
                 "def": {"text": get_if_not_nan(row, "skos:definition@en")},
                 "syn": en_terms
             },
-            "id": row['URI'] if row['URI'] == row['URI'] else f"TAL_{i}"
+            "id": row['skos:exactMatch'] if row['skos:exactMatch'] == row['skos:exactMatch'] else f"TAL_{i}"
         })
     return triples
 
