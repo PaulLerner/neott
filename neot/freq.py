@@ -49,9 +49,9 @@ def main(glossary: str, corpus: Path, output: str, lang: str = "fr", hf: bool = 
     preproc = Preprocessor(whole_word)
     # add space around word
     if whole_word:
-        terms = set(f' {item[lang]["text"].lower().strip()} ' for subset in glossary.values() for item in subset)
+        terms = set(f' {preproc(item[lang]["text"])} ' for subset in glossary.values() for item in subset)
     else:
-        terms = set(item[lang]["text"].lower().strip() for subset in glossary.values() for item in subset)
+        terms = set(preproc(item[lang]["text"]).strip() for subset in glossary.values() for item in subset)
 
     print(f"{len(terms)=}")
     automaton = build_automaton(terms)
