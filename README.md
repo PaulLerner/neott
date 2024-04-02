@@ -4,6 +4,7 @@ Towards Machine Translation of Scientific Neologisms
 # Installation
 ```bash
 conda create --name=neot python=3.10 
+conda activate neot
 conda install pytorch==2.1.1 torchvision==0.16.1 torchaudio==2.1.1 pytorch-cuda=11.8 -c pytorch -c nvidia
 git clone https://github.com/ANR-MaTOS/neot.git
 pip install -e neot

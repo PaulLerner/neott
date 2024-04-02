@@ -1,11 +1,18 @@
 # -*- coding: utf-8 -*-
 import itertools
-
+import json
 from jsonargparse.typing import register_type
 from pathlib import Path
+
 import numpy as np
 
 register_type(Path, type_check=lambda v, t: isinstance(v, t))
+
+
+def load_json_line(path):
+    with open(path, "rt") as file:
+        for line in file.readlines():
+            yield json.loads(line)
 
 
 def random_data(data, n=None):

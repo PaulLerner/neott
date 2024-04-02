@@ -7,7 +7,7 @@ import pandas as pd
 
 
 def get_data():
-    data = pd.read_csv("../data/TAL/terms/Terminologie_TAL/terminologie_tal_mars2024.csv", delimiter=";")
+    data = pd.read_csv("../data/TAL/terms/Terminologie_TAL/TerminologieTAL_tous_les_termes.csv", delimiter=";")
 
     data = data.dropna(subset=["skos:prefLabel@fr", "skos:prefLabel@en"])
 

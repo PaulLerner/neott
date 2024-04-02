@@ -30,7 +30,7 @@ def viz(distances, output):
 def main(data: str, output: str):
     with open(data, "rt") as file:
         data = json.load(file)
-    distances = edit_dist(data)
+    distances = edit_dist(data["test"])
     viz(distances, output)
 
 

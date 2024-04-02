@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
+from typing import Union
 
 import matplotlib.pyplot as plt
 import json
@@ -100,7 +101,7 @@ def gather_results(data, metrics, tokenizer, predictions, morpher):
     fr_ova = pd.DataFrame(fr_ova)
     en_ova = pd.DataFrame(en_ova)
 
-    return results, per_dom, fr_ova, en_ova
+    return results, per_dom, fr_ova, en_ova, metrics_per_label
 
 
 def viz_dom(per_dom, output):
@@ -141,19 +142,22 @@ def tag(pred, tagger):
     pred["pos"] = poses
 
 
-def main(data: Path, pred_path: Path, tokenizer: str = None, output: Path = None, tagger: str = None,
-         subset: str = "test", morpher: str = None, lang: str = "fr"):
+def main(data: Path, pred: Union[Path, dict], tokenizer: str = None, output: Path = None, tagger: str = None,
+         subset: str = "test", morpher: str = None, lang: str = "fr", pred_path: Path = None):
     with open(data, "rt") as file:
         data = json.load(file)
 
-    with open(pred_path, "rt") as file:
-        pred = json.load(file)
+    if isinstance(pred, Path):
+        pred_path = pred
+        with open(pred_path, "rt") as file:
+            pred = json.load(file)
     if tagger is not None:
         print(f"{spacy.prefer_gpu()=}")
         tagger = spacy.load(tagger)
         tag(pred, tagger)
-        with open(pred_path, "wt") as file:
-            json.dump(pred, file)
+        if pred_path is not None:
+            with open(pred_path, "wt") as file:
+                json.dump(pred, file)
 
     if tokenizer is not None:
         tokenizer = AutoTokenizer.from_pretrained(tokenizer, add_prefix_space=True)
@@ -168,12 +172,13 @@ def main(data: Path, pred_path: Path, tokenizer: str = None, output: Path = None
     predictions = pred["predictions"]
     viz_f1(data[subset], pred, metrics)
     viz_wrong(data[subset], pred, metrics)
-    results, per_dom, fr_ova, en_ova = gather_results(data[subset], metrics, tokenizer, predictions, morpher)
+    results, per_dom, fr_ova, en_ova, metrics_per_label = gather_results(data[subset], metrics, tokenizer, predictions, morpher)
     viz_ova(fr_ova, en_ova)
     if output is not None:
         output.mkdir(exist_ok=True)
         dist_f1(metrics, output)
         viz_dists(results, output=output, tokenizer=tokenizer)
+    return results, per_dom, fr_ova, en_ova, metrics_per_label
 
 
 if __name__ == "__main__":

@@ -1,10 +1,7 @@
 from dataclasses import dataclass, asdict
 import json
 from typing import Optional, Union, List
-import os
 
-import numpy as np
-import torch
 from torch.utils.data import DataLoader
 
 import pytorch_lightning as pl
