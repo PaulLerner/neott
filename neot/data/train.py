@@ -55,6 +55,7 @@ class PromptKwargs:
     template_form: Union[str, List[str]] = "term"
     fallback_template: str = None
     selector: Union[str, List[str]] = "random"
+    domain_key: Union[str, List[str]] = "Dom"
     morph_lang: Union[str, List[str]] = "fr"
     morph: Union[str, List[str]] = None
 
