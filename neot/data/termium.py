@@ -27,8 +27,8 @@ def get_data():
 
             term = {
                 "id": f"{path.name}_{i}",
-                "Dom": domain,
-                "S-dom": row.SUBJECT_EN,
+                "Dom": [domain],
+                "S-dom": [row.SUBJECT_EN],
                 "en": {
                     "text": row.TERM_EN,
                     "syn": row.SYNONYMS_EN.split(";") if row.SYNONYMS_EN == row.SYNONYMS_EN else None,
