@@ -47,11 +47,12 @@ class RandomExampleSelector(ExampleSelector):
 
 
 class DomainExampleSelector(ExampleSelector):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, domain_key="Dom", **kwargs):
         super().__init__(*args, **kwargs)
+        self.domain_key = domain_key
         domains = {}
         for item in self.icl_set:
-            item_domains = item.get("Dom") if item.get("Dom") is not None else [None]
+            item_domains = item.get(self.domain_key) if item.get(self.domain_key) is not None else [None]
             for domain in item_domains:
                 domains.setdefault(domain, [])
                 domains[domain].append(item)
@@ -61,11 +62,12 @@ class DomainExampleSelector(ExampleSelector):
             domains[domain] = infinite_random_data(domain_icl_set)
         self.domains = domains
         self.domain_sizes = domain_sizes
+        print(self.domain_key, self.domain_sizes)
         self.fallback = infinite_random_data(self.icl_set)
 
     def __next__(self):
         # note this gives oracle domain -> should be considered oracle/topline
-        domain = self.item.get("Dom")
+        domain = self.item.get(self.domain_key)
         if domain is not None:
             domain = np.random.choice(domain)
         # you do not want to have always the same example in the prompt for domains with fewer examples than n_icl
