@@ -245,13 +245,17 @@ def prompt(eval_set, icl_set, model, tokenizer, data_collator, src: str = "en", 
 def main(data_path: str, eval_set: str = "dev", icl_set: str = "train", prompt_kwargs: PromptKwargs = PromptKwargs(),
          model_kwargs: ModelKwargs = ModelKwargs(), data_kwargs: DataKwargs = DataKwargs(), tokenizer_name: str = None,
          tokenizer_kwargs: TokenizerKwargs = TokenizerKwargs(), add_prefix_space: bool = False,
-         gen_kwargs: GenKwargs = GenKwargs(), output_path: Path = None):
+         gen_kwargs: GenKwargs = GenKwargs(), output_path: Path = None, filter_def: str = None):
     """Prompt LLMs to generate terms (by translating them and/or given their definition)"""
     output_path.mkdir(exist_ok=True)
     with open(data_path, 'rt') as file:
         data = json.load(file)
     eval_set = data[eval_set]
     icl_set = data[icl_set]
+    if filter_def is not None:
+        before = len(icl_set)
+        icl_set = [item for item in icl_set if item[filter_def]['def']['text']]
+        print(f"filtered training set from {before} to {len(icl_set)} with {filter_def} definitions")
 
     model = AutoModelForCausalLM.from_pretrained(**asdict(model_kwargs))
     if not model_kwargs.load_in_8bit:
