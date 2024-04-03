@@ -22,7 +22,9 @@ class Classifier:
     """Multi-label classifier for neologisms morphology"""
     def __init__(self, model_path: str = None, lang: str = None):
         self.model = None if model_path is None else fasttext.load_model(model_path)
-        self.tokenizer = {"en": English, "fr": French}[lang]()
+        if lang is not None:
+            self.tokenizer = {"en": English, "fr": French}[lang]()
+            self.lang = lang
 
     def train(self, train_path: Path, dev_path: Path, test_path: Path = None):
         """Train"""
@@ -69,15 +71,15 @@ class Classifier:
             label.append(MorphLabel.Syntagm.name)
         return label
 
-    def predict(self, predict_path: Path, lang: str):
+    def predict(self, predict_path: Path):
         """Predict on OOD data"""
         with open(predict_path, 'rt') as file:
             data = json.load(file)
         labels, multi_labels = Counter(), Counter()
         for subset in data.values():
             for item in subset:
-                label = self(item[lang]['text'])
-                item[lang]["morph_label"] = label
+                label = self(item[self.lang]['text'])
+                item[self.lang]["morph_label"] = label
                 labels += Counter(label)
                 multi_labels[" ".join(sorted(label))] += 1
         print(labels.most_common())

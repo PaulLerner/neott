@@ -35,9 +35,9 @@ for each language
 `python -m neot.morph.classif train`
 
 ### predict on data
-`python -m neot.morph.classif --model_path=models/morph/fr/model.bin predict data/termium_symptoms/termium_symptoms.json fr`
+`python -m neot.morph.classif --model_path=models/morph/fr/model.bin --lang=fr predict data/termium_symptoms/termium_symptoms.json`
 
-`python -m neot.morph.classif --model_path=models/morph/en/model.bin predict data/termium_symptoms/termium_symptoms.json en`
+`python -m neot.morph.classif --model_path=models/morph/en/model.bin --lang=en predict data/termium_symptoms/termium_symptoms.json`
 
 
 
