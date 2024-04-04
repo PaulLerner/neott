@@ -174,7 +174,7 @@ class DataModule(pl.LightningDataModule):
             if where.shape[0] == 0:
                 where = label.shape[0] - 1
             else:
-                where = where[0, 0]
+                where = where[-1, 0]
             label[: where + 1] = self.trainer.lightning_module.loss_fct.ignore_index
         inputs["labels"] = labels
         return inputs
