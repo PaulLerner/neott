@@ -3,6 +3,8 @@ import torch
 from jsonargparse import CLI
 import json
 from dataclasses import asdict
+
+from torch.nn import CrossEntropyLoss
 from tqdm import tqdm
 
 import numpy as np
@@ -154,12 +156,12 @@ ExampleSelectors = dict(
 )
 
 
-def icl(eval_set, icl_set, template_kwargs, seed: int = 0, selector: str = "random", **kwargs):
+def icl(eval_set, icl_set, template_kwargs, seed: int = 0, selector: str = "random", ppl: bool = False, **kwargs):
     np.random.seed(seed)
     icl_gen = ExampleSelectors[selector](icl_set, **kwargs)
     for item in eval_set:
         icl_eg = [fill_template(eg, icl=True, **template_kwargs) for eg in icl_gen(item)]
-        icl_eg.append(fill_template(item, icl=False, **template_kwargs))
+        icl_eg.append(fill_template(item, icl=ppl, **template_kwargs))
         item["input_text"] = f" {ICL_SEP} ".join(icl_eg)
 
 
@@ -173,6 +175,33 @@ def post_proc(predictions):
         else:
             proc_predictions.append(pred[:i])
     return proc_predictions
+
+
+def compute_ppl(eval_set, model, tokenizer, device="cuda"):
+    loss_fct = CrossEntropyLoss(reduction="none")
+    prompt_sep = tokenizer.encode(':', add_special_tokens=False)
+    assert len(prompt_sep) == 1, prompt_sep
+    prompt_sep = prompt_sep[0]
+    losses = []
+    for inputs in tqdm(eval_set):
+        batch_size, seq_len = inputs["input_ids"].shape
+        inputs.pop("target_text")
+        for k, v in inputs.items():
+            inputs[k] = v.to(device)
+        labels = inputs['input_ids'].clone()
+        for label in labels:
+            where = (label == prompt_sep).nonzero()[-1, 0]
+            label[: where + 1] = loss_fct.ignore_index
+
+        with torch.no_grad():
+            logits = model(**inputs, return_dict=True).logits
+        # there's one token shift between input and output (causal LM)
+        logits = logits[:, :-1].contiguous().view(-1, model.config.vocab_size)
+        labels = labels[:, 1:].contiguous().view(-1)
+        loss = loss_fct(logits, labels).view(batch_size, seq_len-1).cpu()
+        losses.append(loss)
+        # TODO compute PPL from cross-entropy/normalize with #chars
+    return losses
 
 
 def evaluate(eval_set, model, tokenizer, gen_kwargs, preproc, device="cuda"):
@@ -221,16 +250,20 @@ class DataCollator:
 def prompt(eval_set, icl_set, model, tokenizer, data_collator, src: str = "en", tgt: str = "fr",
            template_lang: str = "fr", template_form: str = "term", device="cuda", def_lang: str = "fr",
            data_kwargs: DataKwargs = DataKwargs(), gen_kwargs: GenKwargs = GenKwargs(), output_path: Path = None,
-           **kwargs):
+           ppl: bool = False, **kwargs):
     preproc = Preprocessor(tgt)
     src_lang = LANGUAGES[template_lang][src]
     tgt_lang = LANGUAGES[template_lang][tgt]
     template = PROMPTS[template_lang][template_form]
     template_kwargs = dict(src_lang=src_lang, tgt_lang=tgt_lang, template=template, src=src, tgt=tgt, def_lang=def_lang)
-    icl(eval_set, icl_set, template_kwargs, **kwargs)
+    icl(eval_set, icl_set, template_kwargs, ppl=ppl, **kwargs)
     eval_set = DataLoader(eval_set, collate_fn=data_collator.collate_fn, shuffle=False, **asdict(data_kwargs))
-    output = evaluate(eval_set, model, tokenizer, gen_kwargs=asdict(gen_kwargs), preproc=preproc,
-                      device=device)
+    if ppl:
+        output = compute_ppl(eval_set, model, tokenizer, device=device)
+        torch.save(output, output_path/"ppl.bin")
+        return {}
+    else:
+        output = evaluate(eval_set, model, tokenizer, gen_kwargs=asdict(gen_kwargs), preproc=preproc, device=device)
     metrics = {}
     for k, v in output["metrics"].items():
         if isinstance(v, float):
@@ -247,7 +280,7 @@ def prompt(eval_set, icl_set, model, tokenizer, data_collator, src: str = "en", 
 def main(data_path: str, eval_set: str = "dev", icl_set: str = "train", prompt_kwargs: PromptKwargs = PromptKwargs(),
          model_kwargs: ModelKwargs = ModelKwargs(), data_kwargs: DataKwargs = DataKwargs(), tokenizer_name: str = None,
          tokenizer_kwargs: TokenizerKwargs = TokenizerKwargs(), add_prefix_space: bool = False,
-         gen_kwargs: GenKwargs = GenKwargs(), output_path: Path = None, filter_def: str = None):
+         gen_kwargs: GenKwargs = GenKwargs(), output_path: Path = None, filter_def: str = None, ppl: bool = False):
     """Prompt LLMs to generate terms (by translating them and/or given their definition)"""
     output_path.mkdir(exist_ok=True)
     with open(data_path, 'rt') as file:
@@ -262,8 +295,8 @@ def main(data_path: str, eval_set: str = "dev", icl_set: str = "train", prompt_k
     model = AutoModelForCausalLM.from_pretrained(**asdict(model_kwargs))
     if not model_kwargs.load_in_8bit:
         model = model.to(model_kwargs.device_map)
-    model = torch.compile(model)
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, add_prefix_space=add_prefix_space)
+    model.eval()
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, add_prefix_space=add_prefix_space, add_eos_token=ppl)
     data_collator = DataCollator(tokenizer, tgt=prompt_kwargs.tgt, **asdict(tokenizer_kwargs))
     prompt_kwargs = asdict(prompt_kwargs)
     for k, v in prompt_kwargs.items():
@@ -274,7 +307,7 @@ def main(data_path: str, eval_set: str = "dev", icl_set: str = "train", prompt_k
             continue
         metrics = prompt(eval_set, icl_set, model, tokenizer, data_collator, **kwarg,
                          device=model_kwargs.device_map, data_kwargs=data_kwargs, gen_kwargs=gen_kwargs,
-                         output_path=output_path)
+                         output_path=output_path, ppl=ppl)
         metrics.update(kwarg)
         results.append(metrics)
     print(results)
