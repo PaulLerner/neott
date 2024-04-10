@@ -182,7 +182,7 @@ def compute_ppl(eval_set, model, tokenizer, device="cuda"):
     prompt_sep = tokenizer.encode(':', add_special_tokens=False)
     assert len(prompt_sep) == 1, prompt_sep
     prompt_sep = prompt_sep[0]
-    losses = []
+    losses, all_logits = [], []
     for inputs in tqdm(eval_set):
         batch_size, seq_len = inputs["input_ids"].shape
         inputs.pop("target_text")
@@ -200,8 +200,11 @@ def compute_ppl(eval_set, model, tokenizer, device="cuda"):
         labels = labels[:, 1:].contiguous().view(-1)
         loss = loss_fct(logits, labels).view(batch_size, seq_len-1).cpu()
         losses.append(loss)
+        logits = logits.view(batch_size, seq_len - 1, model.config.vocab_size)
+        labels = labels.view(batch_size, seq_len - 1)
+        all_logits.append(logits[labels != loss_fct.ignore_index].cpu())
         # TODO compute PPL from cross-entropy/normalize with #chars
-    return losses
+    return losses, all_logits
 
 
 def evaluate(eval_set, model, tokenizer, gen_kwargs, preproc, device="cuda"):
@@ -259,8 +262,9 @@ def prompt(eval_set, icl_set, model, tokenizer, data_collator, src: str = "en", 
     icl(eval_set, icl_set, template_kwargs, ppl=ppl, **kwargs)
     eval_set = DataLoader(eval_set, collate_fn=data_collator.collate_fn, shuffle=False, **asdict(data_kwargs))
     if ppl:
-        output = compute_ppl(eval_set, model, tokenizer, device=device)
-        torch.save(output, output_path/"ppl.bin")
+        losses, all_logits = compute_ppl(eval_set, model, tokenizer, device=device)
+        torch.save(losses, output_path/"losses.bin")
+        torch.save(all_logits, output_path/"logits.bin")
         return {}
     else:
         output = evaluate(eval_set, model, tokenizer, gen_kwargs=asdict(gen_kwargs), preproc=preproc, device=device)
