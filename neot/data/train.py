@@ -45,14 +45,42 @@ def fill_template(item, template, icl=False, src="en", tgt="fr", src_lang="angla
                            src_def=item[def_lang]["def"]["text"])
 
 
-def morph_condition(item, input_text, morph_lang, vocab):
-    special_tokens = []
-    for label in item[morph_lang]["morph_label"]:
-        # FIXME: pattern for CroissantLLM: how to extend to other LLMs?
-        special_token = f"<extra_id_{MorphLabel[label].value}>"
-        assert special_token in vocab
-        special_tokens.append(special_token)
-    return "".join(special_tokens) + input_text
+class Identity:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def __call__(self, x, *args, **kwargs):
+        return x
+
+
+class MorphCondition:
+    def __init__(self, morph_lang, vocab, *args, **kwargs):
+        self.morph_lang = morph_lang
+        self.vocab = vocab
+
+    def __call__(self, input_text, item, *args, **kwargs):
+        special_tokens = []
+        for label in item[self.morph_lang]["morph_label"]:
+            # FIXME: pattern for CroissantLLM: how to extend to other LLMs?
+            special_token = f"<extra_id_{MorphLabel[label].value}>"
+            assert special_token in self.vocab
+            special_tokens.append(special_token)
+        return "".join(special_tokens) + input_text
+
+
+class ConstantMorphCondition:
+    def __init__(self, morph: Union[str, List[str]], vocab, *args, **kwargs):
+        if isinstance(morph, str):
+            morph = [morph]
+        special_tokens = []
+        for label in morph:
+            special_token = f"<extra_id_{MorphLabel[label].value}>"
+            assert special_token in vocab
+            special_tokens.append(special_token)
+        self.special_token = "".join(special_tokens)
+
+    def __call__(self, input_text, *args, **kwargs):
+        return self.special_token + input_text
 
 
 @dataclass
@@ -92,6 +120,13 @@ class TokenizerKwargs:
     max_length: int = None
 
 
+MorphClass = {
+    "morph": MorphCondition,
+    "random": Identity,
+    "cmorph": ConstantMorphCondition
+}
+
+
 class DataModule(pl.LightningDataModule):
     def __init__(self, tokenizer_name: str = None, tokenizer_kwargs: TokenizerKwargs = TokenizerKwargs(),
                  add_prefix_space: bool = False, data_path: str = None, data_kwargs: DataKwargs = DataKwargs(),
@@ -118,6 +153,9 @@ class DataModule(pl.LightningDataModule):
         self.prompt_kwargs = prompt_kwargs
         self.filter_def = filter_def
         self.preproc = Preprocessor(prompt_kwargs.tgt)
+        self.morph_condition = MorphClass[self.prompt_kwargs.selector](vocab=self.tokenizer.vocab,
+                                                                       morph_lang=self.prompt_kwargs.morph_lang,
+                                                                       morph=self.prompt_kwargs.morph)
 
     def prepare_data(self):
         print("loading data...")
@@ -171,8 +209,7 @@ class DataModule(pl.LightningDataModule):
             input_text = fill_template(item, template, icl=True, src=self.prompt_kwargs.src,
                                        tgt=self.prompt_kwargs.tgt, src_lang=self.src_lang,
                                        tgt_lang=self.tgt_lang, def_lang=self.prompt_kwargs.def_lang)
-            if self.prompt_kwargs.selector == "morph":
-                input_text = morph_condition(item, input_text, self.prompt_kwargs.morph_lang, self.tokenizer.vocab)
+            input_text = self.morph_condition(input_text, item, self.prompt_kwargs.morph_lang, self.tokenizer.vocab)
             input_texts.append(input_text)
         inputs = self.tokenizer(input_texts, **self.tokenizer_kwargs)
         labels = inputs['input_ids'].clone()
@@ -195,8 +232,7 @@ class DataModule(pl.LightningDataModule):
             input_text = fill_template(item, self.template, icl=False, src=self.prompt_kwargs.src,
                                        tgt=self.prompt_kwargs.tgt, src_lang=self.src_lang,
                                        tgt_lang=self.tgt_lang, def_lang=self.prompt_kwargs.def_lang)
-            if self.prompt_kwargs.selector == "morph":
-                input_text = morph_condition(item, input_text, self.prompt_kwargs.morph_lang, self.tokenizer.vocab)
+            input_text = self.morph_condition(input_text, item, self.prompt_kwargs.morph_lang, self.tokenizer.vocab)
             input_texts.append(input_text)
             target_texts.append(item[self.prompt_kwargs.tgt]["text"])
         inputs = self.tokenizer(input_texts, **self.tokenizer_kwargs)
