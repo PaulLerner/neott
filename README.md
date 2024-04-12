@@ -43,7 +43,6 @@ for each language
 
 ## prompt LLM
 ### validate prompt hyperparam
-TODO config with null template_form and template_lang
 `python -m neot.prompt --config=exp/prompt/config.yaml`
 
 ## translate with mBART

@@ -1,0 +1,53 @@
+data_path: data/france_terme/france_terme.json
+eval_set: train
+icl_set: test
+prompt_kwargs:
+  seed: 0
+  src: en
+  tgt: fr
+  n_icl: 0
+  template_lang: 
+  - en
+  - fr
+  def_lang: fr
+  template_form: 
+  - term
+  - version
+  - tatoeba_mt
+  - tower_base
+model_kwargs:
+  pretrained_model_name_or_path: "Unbabel/TowerBase-7B-v0.1"
+  device_map: cuda
+  config: null
+  cache_dir: null
+  ignore_mismatched_sizes: false
+  force_download: false
+  local_files_only: false
+  token: null
+  revision: main
+  use_safetensors: null
+  resume_download: false
+  output_loading_info: false
+  torch_dtype: null
+  load_in_8bit: true
+  load_in_4bit: false
+  use_flash_attention_2: false
+data_kwargs:
+  batch_size: 32
+  num_workers: 4
+  pin_memory: false
+  drop_last: false
+  timeout: 0.0
+  prefetch_factor: 2
+  persistent_workers: false
+  pin_memory_device: ''
+tokenizer_kwargs:
+  return_tensors: pt
+  padding: longest
+  truncation: false
+  return_overflowing_tokens: false
+add_prefix_space: true
+gen_kwargs:
+  num_beams: 1
+  max_new_tokens: 32
+output_path: exp/prompt
