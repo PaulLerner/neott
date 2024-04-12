@@ -11,6 +11,8 @@ from neot.metrics import Preprocessor
 from neot.morph.labels import MorphLabel
 
 ICL_SEP = "###"
+CHAT_USER_START = "<|im_start|>user\n"
+CHAT_USER_END = "<|im_end|>\n<|im_start|>assistant\n"
 PROMPTS = {
     "en": {
         # bawden and yvon
@@ -19,13 +21,15 @@ PROMPTS = {
         "term": "The term {src_term} can be translated in {tgt_lang} as :{tgt_term}",
         # bloomz (instruction)
         "tatoeba_mt": "Translate the following term from {src_lang} to {tgt_lang} {src_term} :{tgt_term}",
-        "tower_base": "{src_lang} : {src_term}\n{tgt_lang} :{tgt_term}",
-        "tower_instruct": "<|im_start|>user\n{src_lang}: {src_term}\n{tgt_lang}: <|im_end|>\n<|im_start|>assistant\n{tgt_term}"
+        "tower_base": "{src_lang} : {src_term}\n{tgt_lang} :{tgt_term}"
     },
     "fr": {
         # PL
         "term": "Le terme {src_lang} {src_term} peut se traduire en {tgt_lang} par :{tgt_term}",
         "def": "{src_def} définit le terme :{tgt_term}",
+        "def_chat": "Quel terme est défini de la façon suivante ? (réponds seulement le terme, ne fait pas de phrases) : {src_def}\n{tgt_term}",
+        "def_chat2": "Génère un terme qui pourrait être défini de la façon suivante (réponds seulement le terme, ne fait pas de phrases) : {src_def}\n{tgt_term}",
+        "def_morph": "Génère un terme qui pourrait être défini de la façon suivante (réponds seulement le terme, ne fait pas de phrases) : {src_def}\nTu peux utiliser les procédés morphologiques suivants :\nLa préfixation, où un affixe est concaténé au début d’un mot pour en former un nouveau (pré+entraînement = préentraînement)\nLa suffixation, où l’affixation se fait à la fin du mot (généraliser+tion = généralisation)\nLa composition ordinaire, qui compose deux mots indépendants (timbre-poste)\nLa composition néoclassique, qui compose uniquement des morphèmes liés (azo+phile = azophile)\nLa composition syntagmatique, où des syntagmes qui suivent les règles syntaxiques de la langue se lexicalisent et donnent lieu à des termes, souvent non-compositionnels\n{tgt_term}",
         "def+term": "{src_def} définit le terme {src_lang} {src_term} qui peut se traduire en {tgt_lang} par :{tgt_term}",
         # bloomz (instruction)
         "tatoeba_mt": "Traduis le terme {src_lang} suivant en {tgt_lang} {src_term} :{tgt_term}"
@@ -99,6 +103,7 @@ class PromptKwargs:
     domain_key: Union[str, List[str]] = "Dom"
     morph_lang: Union[str, List[str]] = "fr"
     morph: Union[str, List[str]] = None
+    chat: bool = False
 
 
 @dataclass

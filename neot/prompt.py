@@ -15,7 +15,8 @@ from .utils import infinite_random_data, all_size_combination, Path, ListOrArg, 
 from .metrics import compute_metrics, Preprocessor
 from .morph.labels import MorphLabel
 from .trainee import ModelKwargs, GenKwargs
-from .data.train import TokenizerKwargs, DataKwargs, PromptKwargs, PROMPTS, ICL_SEP, LANGUAGES, fill_template
+from .data.train import (TokenizerKwargs, DataKwargs, PromptKwargs, PROMPTS, ICL_SEP, LANGUAGES, fill_template,
+                         CHAT_USER_START, CHAT_USER_END)
 
 
 class ExampleSelector:
@@ -156,13 +157,16 @@ ExampleSelectors = dict(
 )
 
 
-def icl(eval_set, icl_set, template_kwargs, seed: int = 0, selector: str = "random", ppl: bool = False, **kwargs):
+def icl(eval_set, icl_set, template_kwargs, seed: int = 0, selector: str = "random", ppl: bool = False,
+        chat: bool = False, **kwargs):
     np.random.seed(seed)
     icl_gen = ExampleSelectors[selector](icl_set, **kwargs)
     for item in eval_set:
         icl_eg = [fill_template(eg, icl=True, **template_kwargs) for eg in icl_gen(item)]
         icl_eg.append(fill_template(item, icl=ppl, **template_kwargs))
         item["input_text"] = f" {ICL_SEP} ".join(icl_eg)
+        if chat:
+            item["input_text"] = CHAT_USER_START + item["input_text"] + CHAT_USER_END
 
 
 def post_proc(predictions):
@@ -288,6 +292,7 @@ def main(data_path: str, eval_set: str = "dev", icl_set: str = "train", prompt_k
          tokenizer_kwargs: TokenizerKwargs = TokenizerKwargs(), add_prefix_space: bool = False,
          gen_kwargs: GenKwargs = GenKwargs(), output_path: Path = None, filter_def: str = None, ppl: bool = False):
     """Prompt LLMs to generate terms (by translating them and/or given their definition)"""
+    assert not (prompt_kwargs.chat and ppl)
     if tokenizer_name is None:
         tokenizer_name = model_kwargs.pretrained_model_name_or_path
     # Tower: note this one is not appropriate for current ICL implementation (would work only for n_icl=0)
