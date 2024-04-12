@@ -224,7 +224,7 @@ def evaluate(eval_set, model, tokenizer, gen_kwargs, preproc, device="cuda"):
         if tokenizer.padding_side == 'left':
             output = output[:, seq_len:]
         else:
-            raise NotImplementedError("")
+            raise NotImplementedError(f"{tokenizer.padding_side=}")
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
         predictions.extend(output_text)
         targets.extend(target_text)
@@ -245,6 +245,8 @@ class DataCollator:
         self.kwargs = kwargs
 
     def collate_fn(self, items):
+        # FIXME: maybe refactor with apply_chat_template?
+        # https://huggingface.co/docs/transformers/main/en/chat_templating
         inputs = self.tokenizer([item["input_text"] for item in items], **self.kwargs)
         inputs["target_text"] = [item[self.tgt]["text"] for item in items]
         return inputs
@@ -286,6 +288,13 @@ def main(data_path: str, eval_set: str = "dev", icl_set: str = "train", prompt_k
          tokenizer_kwargs: TokenizerKwargs = TokenizerKwargs(), add_prefix_space: bool = False,
          gen_kwargs: GenKwargs = GenKwargs(), output_path: Path = None, filter_def: str = None, ppl: bool = False):
     """Prompt LLMs to generate terms (by translating them and/or given their definition)"""
+    if tokenizer_name is None:
+        tokenizer_name = model_kwargs.pretrained_model_name_or_path
+    # Tower: note this one is not appropriate for current ICL implementation (would work only for n_icl=0)
+    # original one uses jinja for templating, see https://github.com/deep-spin/tower-eval/blob/420e59377061b2e5aefba223423c71beba718dbb/configs/examples/prepare_random.yaml#L7
+    if prompt_kwargs.template_form == "tower_instruct":
+        assert prompt_kwargs.n_icl == 0
+
     output_path.mkdir(exist_ok=True)
     with open(data_path, 'rt') as file:
         data = json.load(file)

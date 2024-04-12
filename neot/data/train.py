@@ -18,7 +18,9 @@ PROMPTS = {
         # PL
         "term": "The term {src_term} can be translated in {tgt_lang} as :{tgt_term}",
         # bloomz (instruction)
-        "tatoeba_mt": "Translate the following term from {src_lang} to {tgt_lang} {src_term} :{tgt_term}"
+        "tatoeba_mt": "Translate the following term from {src_lang} to {tgt_lang} {src_term} :{tgt_term}",
+        "tower_base": "{src_lang} : {src_term}\n{tgt_lang} :{tgt_term}",
+        "tower_instruct": "<|im_start|>user\n{src_lang}: {src_term}\n{tgt_lang}: <|im_end|>\n<|im_start|>assistant\n{tgt_term}"
     },
     "fr": {
         # PL
@@ -145,8 +147,11 @@ class DataModule(pl.LightningDataModule):
         assert prompt_kwargs.n_icl == 0
         self.src_lang = LANGUAGES[prompt_kwargs.template_lang][prompt_kwargs.src]
         self.tgt_lang = LANGUAGES[prompt_kwargs.template_lang][prompt_kwargs.tgt]
+        # FIXME: tower_instruct template uses "\n" as delimiter
+        assert prompt_kwargs.template_form != "tower_instruct"
         self.template = PROMPTS[prompt_kwargs.template_lang][prompt_kwargs.template_form]
         if prompt_kwargs.fallback_template is not None:
+            assert prompt_kwargs.fallback_template != "tower_instruct"
             self.fallback_template = PROMPTS[prompt_kwargs.template_lang][prompt_kwargs.fallback_template]
         else:
             self.fallback_template = None
