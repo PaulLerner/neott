@@ -21,9 +21,12 @@ PROMPTS = {
         "term": "The term {src_term} can be translated in {tgt_lang} as :{tgt_term}",
         # bloomz (instruction)
         "tatoeba_mt": "Translate the following term from {src_lang} to {tgt_lang} {src_term} :{tgt_term}",
-        "tower_base": "{src_lang} : {src_term}\n{tgt_lang} :{tgt_term}"
+        "tower_base": "{src_lang} : {src_term}\n{tgt_lang} :{tgt_term}",
+        "def_chat": "Which {tgt_lang} term is defined in the following way?\n{src_def}\n{tgt_term}",
+        "def_chat2": "Generate a {tgt_lang} term that could be defined in the following way\n{src_def}\n{tgt_term}"
     },
     "fr": {
+        "empty": ":{tgt_term}",
         # PL
         "term": "Le terme {src_lang} {src_term} peut se traduire en {tgt_lang} par :{tgt_term}",
         "def": "{src_def} définit le terme :{tgt_term}",

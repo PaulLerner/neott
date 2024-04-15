@@ -194,8 +194,11 @@ def compute_ppl(eval_set, model, tokenizer, device="cuda"):
             inputs[k] = v.to(device)
         labels = inputs['input_ids'].clone()
         for label in labels:
-            where = (label == prompt_sep).nonzero()[-1, 0]
-            label[: where + 1] = loss_fct.ignore_index
+            where = (label == prompt_sep).nonzero()
+            # no prompt_sep with "empty" template
+            if where.shape[0] == 0:
+                continue
+            label[: where[-1, 0] + 1] = loss_fct.ignore_index
 
         with torch.no_grad():
             logits = model(**inputs, return_dict=True).logits
