@@ -87,7 +87,9 @@ class Trainee(pl.LightningModule):
         if gradient_checkpointing:
             self.gradient_checkpointing_enable()
         self.loss_fct = CrossEntropyLoss()
-        self.gen_kwargs = asdict(gen_kwargs)
+        if not isinstance(gen_kwargs, dict):
+            gen_kwargs = asdict(gen_kwargs)
+        self.gen_kwargs = gen_kwargs
 
     def training_step(self, batch, batch_idx):
         labels = batch.pop("labels")
