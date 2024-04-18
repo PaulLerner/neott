@@ -49,6 +49,36 @@ class RandomExampleSelector(ExampleSelector):
         return next(self.icl_set)
 
 
+class LongestStartExampleSelector(ExampleSelector):
+    def __init__(self, *args, def_lang: str = "fr", **kwargs):
+        super().__init__(*args, **kwargs)
+        self.def_lang = def_lang
+        self.definitions = np.array([item[self.def_lang]["def"]["text"] for item in self.icl_set])
+        self.indices = self.definitions.argsort()
+
+    def __call__(self, item):
+        definition = item[self.def_lang]["def"]["text"]
+        i = self.definitions.searchsorted(definition, sorter=self.indices)
+        common_chars = []
+        # the closest is i but the n_icl closest may be before or after
+        for j in self.indices[i-self.n_icl: i+self.n_icl]:
+            d = self.definitions[j]
+            eg = self.icl_set[j]
+            # do not use self in the prompt (may happen if using eval_set as icl_set)
+            if eg["id"] == item["id"]:
+                common_chars.append(-1)
+                continue
+            cs = 0
+            for c_p, c_c in zip(definition, d):
+                if c_p != c_c:
+                    break
+                cs += 1
+            common_chars.append(cs)
+
+        for j in self.indices[i-self.n_icl: i+self.n_icl][(-np.array(common_chars)).argsort()[:self.n_icl]]:
+            yield self.icl_set[j]
+
+
 class DomainExampleSelector(ExampleSelector):
     def __init__(self, *args, domain_key="Dom", **kwargs):
         super().__init__(*args, **kwargs)
@@ -153,17 +183,18 @@ ExampleSelectors = dict(
     random=RandomExampleSelector,
     domain=DomainExampleSelector,
     morph=MorphExampleSelector,
-    cmorph=ConstrainedMorphExampleSelector
+    cmorph=ConstrainedMorphExampleSelector,
+    start=LongestStartExampleSelector
 )
 
 
 def icl(eval_set, icl_set, template_kwargs, seed: int = 0, selector: str = "random", ppl: bool = False,
-        chat: bool = False, **kwargs):
+        chat: bool = False, def_lang: str = "fr", **kwargs):
     np.random.seed(seed)
-    icl_gen = ExampleSelectors[selector](icl_set, **kwargs)
+    icl_gen = ExampleSelectors[selector](icl_set, def_lang=def_lang, **kwargs)
     for item in eval_set:
-        icl_eg = [fill_template(eg, icl=True, **template_kwargs) for eg in icl_gen(item)]
-        icl_eg.append(fill_template(item, icl=ppl, **template_kwargs))
+        icl_eg = [fill_template(eg, icl=True, def_lang=def_lang, **template_kwargs) for eg in icl_gen(item)]
+        icl_eg.append(fill_template(item, icl=ppl, def_lang=def_lang, **template_kwargs))
         item["input_text"] = f" {ICL_SEP} ".join(icl_eg)
         if chat:
             item["input_text"] = CHAT_USER_START + item["input_text"] + CHAT_USER_END
@@ -260,14 +291,14 @@ class DataCollator:
 
 
 def prompt(eval_set, icl_set, model, tokenizer, data_collator, src: str = "en", tgt: str = "fr",
-           template_lang: str = "fr", template_form: str = "term", device="cuda", def_lang: str = "fr",
+           template_lang: str = "fr", template_form: str = "term", device="cuda",
            data_kwargs: DataKwargs = DataKwargs(), gen_kwargs: GenKwargs = GenKwargs(), output_path: Path = None,
            ppl: bool = False, **kwargs):
     preproc = Preprocessor(tgt)
     src_lang = LANGUAGES[template_lang][src]
     tgt_lang = LANGUAGES[template_lang][tgt]
     template = PROMPTS[template_lang][template_form]
-    template_kwargs = dict(src_lang=src_lang, tgt_lang=tgt_lang, template=template, src=src, tgt=tgt, def_lang=def_lang)
+    template_kwargs = dict(src_lang=src_lang, tgt_lang=tgt_lang, template=template, src=src, tgt=tgt)
     icl(eval_set, icl_set, template_kwargs, ppl=ppl, **kwargs)
     eval_set = DataLoader(eval_set, collate_fn=data_collator.collate_fn, shuffle=False, **asdict(data_kwargs))
     if ppl:
@@ -296,13 +327,9 @@ def main(data_path: str, eval_set: str = "dev", icl_set: str = "train", prompt_k
          gen_kwargs: GenKwargs = GenKwargs(), output_path: Path = None, filter_def: str = None, ppl: bool = False):
     """Prompt LLMs to generate terms (by translating them and/or given their definition)"""
     assert not (prompt_kwargs.chat and ppl)
+    hyperparameters = dict(data_path=data_path, eval_set=eval_set, icl_set=icl_set, model=model_kwargs.pretrained_model_name_or_path)
     if tokenizer_name is None:
         tokenizer_name = model_kwargs.pretrained_model_name_or_path
-    # Tower: note this one is not appropriate for current ICL implementation (would work only for n_icl=0)
-    # original one uses jinja for templating, see https://github.com/deep-spin/tower-eval/blob/420e59377061b2e5aefba223423c71beba718dbb/configs/examples/prepare_random.yaml#L7
-    if prompt_kwargs.template_form == "tower_instruct":
-        assert prompt_kwargs.n_icl == 0
-
     output_path.mkdir(exist_ok=True)
     with open(data_path, 'rt') as file:
         data = json.load(file)
@@ -329,12 +356,11 @@ def main(data_path: str, eval_set: str = "dev", icl_set: str = "train", prompt_k
         metrics = prompt(eval_set, icl_set, model, tokenizer, data_collator, **kwarg,
                          device=model_kwargs.device_map, data_kwargs=data_kwargs, gen_kwargs=gen_kwargs,
                          output_path=output_path, ppl=ppl)
-        metrics.update(kwarg)
+        metrics.update(kwarg|hyperparameters)
         results.append(metrics)
     print(results)
     if output_path is not None:
-        mode = "a" if (output_path / "results.csv").exists() else "w"
-        pd.DataFrame(results).to_csv(output_path / "results.csv", mode=mode)
+        pd.DataFrame(results).to_csv(output_path / "results.csv", mode="a")
 
 
 if __name__ == "__main__":
