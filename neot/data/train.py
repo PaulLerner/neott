@@ -106,7 +106,9 @@ class PromptKwargs:
     domain_key: Union[str, List[str]] = "Dom"
     morph_lang: Union[str, List[str]] = "fr"
     morph: Union[str, List[str]] = None
-    chat: bool = False
+    chat: Union[bool, List[bool]] = False
+    start: Union[bool, List[bool]] = True
+    definition: Union[bool, List[bool]] = True
 
 
 @dataclass

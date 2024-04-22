@@ -49,27 +49,44 @@ class RandomExampleSelector(ExampleSelector):
         return next(self.icl_set)
 
 
-class LongestStartExampleSelector(ExampleSelector):
-    def __init__(self, *args, def_lang: str = "fr", **kwargs):
+class LongestExampleSelector(ExampleSelector):
+    def __init__(self, *args, def_lang: str = "fr", start: bool = True, definition: bool = True, src="en", **kwargs):
         super().__init__(*args, **kwargs)
+        self.definition = definition
+        self.start = start
+        self.src = src
         self.def_lang = def_lang
-        self.definitions = np.array([item[self.def_lang]["def"]["text"] for item in self.icl_set])
-        self.indices = self.definitions.argsort()
+        examples = []
+        for item in self.icl_set:
+            if self.definition:
+                example = item[self.def_lang]["def"]["text"]
+            else:
+                example = item[self.src]["text"]
+            if not self.start:
+                example = example[::-1]
+            examples.append(example)
+        self.examples = np.array(examples)
+        self.indices = self.examples.argsort()
 
     def __call__(self, item):
-        definition = item[self.def_lang]["def"]["text"]
-        i = self.definitions.searchsorted(definition, sorter=self.indices)
+        if self.definition:
+            query = item[self.def_lang]["def"]["text"]
+        else:
+            query = item[self.src]["text"]
+        if not self.start:
+            query = query[::-1]
+        i = self.examples.searchsorted(query, sorter=self.indices)
         common_chars = []
         # the closest is i but the n_icl closest may be before or after
         for j in self.indices[i-self.n_icl: i+self.n_icl]:
-            d = self.definitions[j]
+            d = self.examples[j]
             eg = self.icl_set[j]
             # do not use self in the prompt (may happen if using eval_set as icl_set)
             if eg["id"] == item["id"]:
                 common_chars.append(-1)
                 continue
             cs = 0
-            for c_p, c_c in zip(definition, d):
+            for c_p, c_c in zip(query, d):
                 if c_p != c_c:
                     break
                 cs += 1
@@ -184,17 +201,17 @@ ExampleSelectors = dict(
     domain=DomainExampleSelector,
     morph=MorphExampleSelector,
     cmorph=ConstrainedMorphExampleSelector,
-    start=LongestStartExampleSelector
+    longest=LongestExampleSelector
 )
 
 
 def icl(eval_set, icl_set, template_kwargs, seed: int = 0, selector: str = "random", ppl: bool = False,
-        chat: bool = False, def_lang: str = "fr", **kwargs):
+        chat: bool = False, def_lang: str = "fr", src="en", **kwargs):
     np.random.seed(seed)
-    icl_gen = ExampleSelectors[selector](icl_set, def_lang=def_lang, **kwargs)
+    icl_gen = ExampleSelectors[selector](icl_set, def_lang=def_lang, src=src, **kwargs)
     for item in eval_set:
-        icl_eg = [fill_template(eg, icl=True, def_lang=def_lang, **template_kwargs) for eg in icl_gen(item)]
-        icl_eg.append(fill_template(item, icl=ppl, def_lang=def_lang, **template_kwargs))
+        icl_eg = [fill_template(eg, icl=True, def_lang=def_lang, src=src, **template_kwargs) for eg in icl_gen(item)]
+        icl_eg.append(fill_template(item, icl=ppl, def_lang=def_lang, src=src, **template_kwargs))
         item["input_text"] = f" {ICL_SEP} ".join(icl_eg)
         if chat:
             item["input_text"] = CHAT_USER_START + item["input_text"] + CHAT_USER_END
@@ -298,7 +315,7 @@ def prompt(eval_set, icl_set, model, tokenizer, data_collator, src: str = "en", 
     src_lang = LANGUAGES[template_lang][src]
     tgt_lang = LANGUAGES[template_lang][tgt]
     template = PROMPTS[template_lang][template_form]
-    template_kwargs = dict(src_lang=src_lang, tgt_lang=tgt_lang, template=template, src=src, tgt=tgt)
+    template_kwargs = dict(src_lang=src_lang, tgt_lang=tgt_lang, template=template, tgt=tgt)
     icl(eval_set, icl_set, template_kwargs, ppl=ppl, **kwargs)
     eval_set = DataLoader(eval_set, collate_fn=data_collator.collate_fn, shuffle=False, **asdict(data_kwargs))
     if ppl:
