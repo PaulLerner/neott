@@ -97,18 +97,11 @@ class PromptKwargs:
     seed: Union[int, List[int]] = 0
     src: Union[str, List[str]] = "en"
     tgt: Union[str, List[str]] = "fr"
-    n_icl: Union[int, List[int]] = 5
     template_lang: Union[str, List[str]] = "fr"
     def_lang: Union[str, List[str]] = "fr"
     template_form: Union[str, List[str]] = "term"
     fallback_template: str = None
-    selector: Union[str, List[str]] = "random"
-    domain_key: Union[str, List[str]] = "Dom"
-    morph_lang: Union[str, List[str]] = "fr"
-    morph: Union[str, List[str]] = None
     chat: Union[bool, List[bool]] = False
-    start: Union[bool, List[bool]] = True
-    definition: Union[bool, List[bool]] = True
 
 
 @dataclass

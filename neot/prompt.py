@@ -1,8 +1,9 @@
 import pandas as pd
 import torch
 from jsonargparse import CLI
+from dataclasses import dataclass, asdict
 import json
-from dataclasses import asdict
+from typing import List
 
 from torch.nn import CrossEntropyLoss
 from tqdm import tqdm
@@ -17,6 +18,17 @@ from .morph.labels import MorphLabel
 from .trainee import ModelKwargs, GenKwargs
 from .data.train import (TokenizerKwargs, DataKwargs, PromptKwargs, PROMPTS, ICL_SEP, LANGUAGES, fill_template,
                          CHAT_USER_START, CHAT_USER_END)
+
+
+@dataclass
+class SelectorKwargs:
+    n_icl: int = 5
+    selector: str = "random"
+    domain_key: str = "Dom"
+    morph_lang: str = "fr"
+    morph: str = None
+    start: bool = True
+    definition: bool = True
 
 
 class ExampleSelector:
@@ -205,10 +217,26 @@ ExampleSelectors = dict(
 )
 
 
-def icl(eval_set, icl_set, template_kwargs, seed: int = 0, selector: str = "random", ppl: bool = False,
+class SelectorFusion:
+    def __init__(self, selector_kwargs: list, **kwargs):
+        selectors = []
+        for kwarg in selector_kwargs:
+            print(kwarg, kwargs)
+            selector = kwarg.pop("selector")
+            selectors.append(ExampleSelectors[selector](**kwarg, **kwargs))
+        self.selectors = selectors
+
+    def __call__(self, item):
+        # simply concatenate all selections (careful to control n_icl for each selector)
+        for selector in self.selectors:
+            for eg in selector(item):
+                yield eg
+
+
+def icl(eval_set, icl_set, template_kwargs, seed: int = 0, ppl: bool = False,
         chat: bool = False, def_lang: str = "fr", src="en", **kwargs):
     np.random.seed(seed)
-    icl_gen = ExampleSelectors[selector](icl_set, def_lang=def_lang, src=src, **kwargs)
+    icl_gen = SelectorFusion(icl_set=icl_set, def_lang=def_lang, src=src, **kwargs)
     for item in eval_set:
         icl_eg = [fill_template(eg, icl=True, def_lang=def_lang, src=src, **template_kwargs) for eg in icl_gen(item)]
         icl_eg.append(fill_template(item, icl=ppl, def_lang=def_lang, src=src, **template_kwargs))
@@ -341,12 +369,19 @@ def prompt(eval_set, icl_set, model, tokenizer, data_collator, src: str = "en", 
 def main(data_path: str, eval_set: str = "dev", icl_set: str = "train", prompt_kwargs: PromptKwargs = PromptKwargs(),
          model_kwargs: ModelKwargs = ModelKwargs(), data_kwargs: DataKwargs = DataKwargs(), tokenizer_name: str = None,
          tokenizer_kwargs: TokenizerKwargs = TokenizerKwargs(), add_prefix_space: bool = False,
-         gen_kwargs: GenKwargs = GenKwargs(), output_path: Path = None, filter_def: str = None, ppl: bool = False):
+         gen_kwargs: GenKwargs = GenKwargs(), output_path: Path = None, filter_def: str = None, ppl: bool = False,
+         selector_kwargs: List[SelectorKwargs] = None):
     """Prompt LLMs to generate terms (by translating them and/or given their definition)"""
     assert not (prompt_kwargs.chat and ppl)
     hyperparameters = dict(data_path=data_path, eval_set=eval_set, icl_set=icl_set, model=model_kwargs.pretrained_model_name_or_path)
     if tokenizer_name is None:
         tokenizer_name = model_kwargs.pretrained_model_name_or_path
+    if selector_kwargs is None:
+        selector_kwargs = [SelectorKwargs()]
+    selector_kwargs = [asdict(kwarg) for kwarg in selector_kwargs]
+    for i, kwarg in enumerate(selector_kwargs):
+        for k, v in kwarg.items():
+            hyperparameters[f"{k}_{i}"] = v
     output_path.mkdir(exist_ok=True)
     with open(data_path, 'rt') as file:
         data = json.load(file)
@@ -372,7 +407,7 @@ def main(data_path: str, eval_set: str = "dev", icl_set: str = "train", prompt_k
             continue
         metrics = prompt(eval_set, icl_set, model, tokenizer, data_collator, **kwarg,
                          device=model_kwargs.device_map, data_kwargs=data_kwargs, gen_kwargs=gen_kwargs,
-                         output_path=output_path, ppl=ppl)
+                         output_path=output_path, ppl=ppl, selector_kwargs=selector_kwargs)
         metrics.update(kwarg|hyperparameters)
         results.append(metrics)
     print(results)
