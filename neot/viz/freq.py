@@ -15,7 +15,7 @@ import seaborn as sns
 from neot.utils import ListOrArg
 
 
-def viz(freq, output):
+def viz(freq, output=None):
     print(f"Top-50\n{pd.DataFrame(freq.most_common(50)).to_latex(index=False)}")
 
     freq_v = np.array(list(freq.values()))
@@ -31,10 +31,12 @@ def viz(freq, output):
 
     # shift by 1 to plot zero values in log-scale
     fig = sns.displot(freq_v+1, bins=100, log_scale=True)
-    fig.savefig(output)
+    if output is not None:
+        fig.savefig(output)
+    return fig
 
 
-def main(output: str, freq_paths: Union[str, List[str]] = None):
+def main(freq_paths: Union[str, List[str]], output: str = None):
     freq_paths = ListOrArg(freq_paths)
     freq = Counter()
     for freq_path in freq_paths:
@@ -42,7 +44,7 @@ def main(output: str, freq_paths: Union[str, List[str]] = None):
             for k, v in Counter(json.load(file)).items():
                 # Counter.__add__ will remove 0
                 freq[k] += v
-    viz(freq, output)
+    return viz(freq, output), freq
 
 
 if __name__ == "__main__":

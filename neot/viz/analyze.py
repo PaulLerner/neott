@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
-from typing import Union
+from typing import Union, List
 
 import matplotlib.pyplot as plt
 import json
@@ -12,11 +12,10 @@ import pandas as pd
 
 from transformers import AutoTokenizer
 
-import spacy
-
-from ..utils import Path
+from ..utils import Path, load_json_line
 from ..morph.labels import MorphLabel
 from ..morph.classif import Classifier
+from .freq import main as viz_freq
 
 
 def viz_f1(data, pred, metrics):
@@ -38,7 +37,7 @@ def dist_f1(metrics, output):
     fig.savefig(output / "f1_dist.pdf")
 
 
-def gather_results(data, metrics, tokenizer, predictions, morpher):
+def gather_results(data, metrics, predictions, tokenizer=None, morpher=None, freq=None, lang: str = "fr"):
     results = []
 
     fr_ova = {c.name: {True: [], False: []} for c in MorphLabel}
@@ -48,10 +47,12 @@ def gather_results(data, metrics, tokenizer, predictions, morpher):
 
     per_dom = []
     for i, item in enumerate(data):
+        f = freq[f' {item[lang]["text"].lower().strip()} '] + 1
         p_fr = item["fr"]["morph_label"]
         p_en = item["en"]["morph_label"]
+        p_tgt = set(item[lang]["morph_label"])
         pred = predictions[i][0].split("\n")[0].strip()
-        cps += Counter(p_fr)
+        cps += Counter(item[lang]["morph_label"])
         em = metrics["ems"][i]
         for label in MorphLabel:
             fr_ova[label.name][label.name in p_fr].append(em)
@@ -60,12 +61,12 @@ def gather_results(data, metrics, tokenizer, predictions, morpher):
                 labels = morpher(pred)
                 if label.name in labels:
                     pps[label.name] += 1
-                    if label.name in p_fr:
+                    if label.name in p_tgt:
                         tps[label.name] += 1
         if tokenizer is not None:
-            term_fertility = len(tokenizer.tokenize(item['fr']["text"]))
+            term_fertility = len(tokenizer.tokenize(item[lang]["text"]))
             token_fertility = []
-            for token in item["fr"]["tokens"]:
+            for token in item[lang]["tokens"]:
                 token_fertility.append(len(tokenizer.tokenize(token)))
             token_fertility = max(token_fertility)
         else:
@@ -77,7 +78,8 @@ def gather_results(data, metrics, tokenizer, predictions, morpher):
             "Edit dist.": editdistance.eval(item['fr']["text"], item['en']["text"]),
             "Term fertility": term_fertility,
             "Word fertility": token_fertility,
-            "# words": len(item["fr"]["tokens"])
+            "# words": len(item[lang]["tokens"]),
+            "freq": f
         })
         for dom in item["Dom"]:
             per_dom.append({"Domain": dom, "EM": em})
@@ -90,7 +92,7 @@ def gather_results(data, metrics, tokenizer, predictions, morpher):
                                 "recall": v / cps[k] if cps[k] > 0 else 0.0}
     metrics_per_label = pd.DataFrame(metrics_per_label).T
     metrics_per_label['f1'] = (2 * metrics_per_label['precision'] * metrics_per_label['recall']) / (
-                metrics_per_label['precision'] + metrics_per_label['recall'])
+            metrics_per_label['precision'] + metrics_per_label['recall'])
     print((metrics_per_label * 100).to_latex(float_format='%.1f'))
     for label in fr_ova:
         for label_exists in fr_ova[label]:
@@ -101,7 +103,7 @@ def gather_results(data, metrics, tokenizer, predictions, morpher):
     fr_ova = pd.DataFrame(fr_ova)
     en_ova = pd.DataFrame(en_ova)
 
-    return results, per_dom, fr_ova, en_ova, metrics_per_label
+    return results, per_dom, fr_ova, en_ova, metrics_per_label, tps, pps, cps
 
 
 def viz_dom(per_dom, output):
@@ -142,22 +144,10 @@ def tag(pred, tagger):
     pred["pos"] = poses
 
 
-def main(data: Path, pred: Union[Path, dict], tokenizer: str = None, output: Path = None, tagger: str = None,
-         subset: str = "test", morpher: str = None, lang: str = "fr", pred_path: Path = None):
+def main(data: Path, preds: Path, tokenizer: str = None, output: Path = None, subset: str = "test",
+         morpher: str = None, lang: str = "fr", freq_paths: Union[str, List[str]] = None):
     with open(data, "rt") as file:
         data = json.load(file)
-
-    if isinstance(pred, Path):
-        pred_path = pred
-        with open(pred_path, "rt") as file:
-            pred = json.load(file)
-    if tagger is not None:
-        print(f"{spacy.prefer_gpu()=}")
-        tagger = spacy.load(tagger)
-        tag(pred, tagger)
-        if pred_path is not None:
-            with open(pred_path, "wt") as file:
-                json.dump(pred, file)
 
     if tokenizer is not None:
         tokenizer = AutoTokenizer.from_pretrained(tokenizer, add_prefix_space=True)
@@ -165,20 +155,32 @@ def main(data: Path, pred: Union[Path, dict], tokenizer: str = None, output: Pat
     if morpher is not None:
         morpher = Classifier(morpher, lang)
 
-    metrics = pred["metrics"]
-    for k, v in metrics.items():
-        if isinstance(v, float):
-            print(k, v)
-    predictions = pred["predictions"]
-    viz_f1(data[subset], pred, metrics)
-    viz_wrong(data[subset], pred, metrics)
-    results, per_dom, fr_ova, en_ova, metrics_per_label = gather_results(data[subset], metrics, tokenizer, predictions, morpher)
-    viz_ova(fr_ova, en_ova)
-    if output is not None:
-        output.mkdir(exist_ok=True)
-        dist_f1(metrics, output)
-        viz_dists(results, output=output, tokenizer=tokenizer)
-    return results, per_dom, fr_ova, en_ova, metrics_per_label
+    if freq_paths is not None:
+        freq_fig, freq = viz_freq(freq_paths)
+    else:
+        freq_fig, freq = None, None
+
+    outputs = []
+    for pred in load_json_line(preds):
+        print(pred["hyperparameters"])
+        metrics = pred["metrics"]
+        for k, v in metrics.items():
+            if isinstance(v, float):
+                print(k, v)
+        predictions = pred["predictions"]
+        assert len(predictions) == len(data[subset])
+        viz_f1(data[subset], pred, metrics)
+        viz_wrong(data[subset], pred, metrics)
+        results, per_dom, fr_ova, en_ova, *more_results = gather_results(
+            data[subset], metrics, predictions, tokenizer=tokenizer, morpher=morpher, freq=freq, lang=lang
+        )
+        outputs.append((pred, results, per_dom, fr_ova, en_ova, *more_results))
+        viz_ova(fr_ova, en_ova)
+        if output is not None:
+            output.mkdir(exist_ok=True)
+            dist_f1(metrics, output)
+            viz_dists(results, output=output, tokenizer=tokenizer)
+    return freq_fig, freq, outputs
 
 
 if __name__ == "__main__":
