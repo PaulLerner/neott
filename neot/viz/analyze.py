@@ -54,9 +54,12 @@ def gather_results(data, metrics, predictions, tokenizer=None, morpher=None, fre
         pred = predictions[i][0].split("\n")[0].strip()
         cps += Counter(item[lang]["morph_label"])
         em = metrics["ems"][i]
+
+        bi_label = {}
         for label in MorphLabel:
             fr_ova[label.name][label.name in p_fr].append(em)
             en_ova[label.name][label.name in p_en].append(em)
+            bi_label[label.name] = label.name in p_tgt
             if morpher is not None:
                 labels = morpher(pred)
                 if label.name in labels:
@@ -79,7 +82,8 @@ def gather_results(data, metrics, predictions, tokenizer=None, morpher=None, fre
             "Term fertility": term_fertility,
             "Word fertility": token_fertility,
             "# words": len(item[lang]["tokens"]),
-            "freq": f
+            "freq": f,
+            **bi_label
         })
         for dom in item["Dom"]:
             per_dom.append({"Domain": dom, "EM": em})
