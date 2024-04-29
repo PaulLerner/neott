@@ -221,7 +221,7 @@ class SelectorFusion:
     def __init__(self, selector_kwargs: list, **kwargs):
         selectors = []
         for kwarg in selector_kwargs:
-            selector = kwarg.pop("selector")
+            selector = kwarg["selector"]
             selectors.append(ExampleSelectors[selector](**kwarg, **kwargs))
         self.selectors = selectors
 
