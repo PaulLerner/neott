@@ -365,14 +365,18 @@ def prompt(eval_set, icl_set, model, tokenizer, data_collator, src: str = "en", 
     return metrics
 
 
-def main(data_path: str, eval_set: str = "dev", icl_set: str = "train", prompt_kwargs: PromptKwargs = PromptKwargs(),
-         model_kwargs: ModelKwargs = ModelKwargs(), data_kwargs: DataKwargs = DataKwargs(), tokenizer_name: str = None,
+def main(eval_path: str, icl_path: str = None, eval_set: str = "dev", icl_set: str = "train",
+         prompt_kwargs: PromptKwargs = PromptKwargs(), model_kwargs: ModelKwargs = ModelKwargs(),
+         data_kwargs: DataKwargs = DataKwargs(), tokenizer_name: str = None,
          tokenizer_kwargs: TokenizerKwargs = TokenizerKwargs(), add_prefix_space: bool = False,
          gen_kwargs: GenKwargs = GenKwargs(), output_path: Path = None, filter_def: str = None, ppl: bool = False,
          selector_kwargs: List[SelectorKwargs] = None):
     """Prompt LLMs to generate terms (by translating them and/or given their definition)"""
     assert not (prompt_kwargs.chat and ppl)
-    hyperparameters = dict(data_path=data_path, eval_set=eval_set, icl_set=icl_set, model=model_kwargs.pretrained_model_name_or_path)
+    hyperparameters = dict(
+        eval_path=eval_path, icl_path=icl_path, eval_set=eval_set, icl_set=icl_set,
+        model=model_kwargs.pretrained_model_name_or_path
+    )
     if tokenizer_name is None:
         tokenizer_name = model_kwargs.pretrained_model_name_or_path
     if selector_kwargs is None:
@@ -382,9 +386,12 @@ def main(data_path: str, eval_set: str = "dev", icl_set: str = "train", prompt_k
         for k, v in kwarg.items():
             hyperparameters[f"{k}_{i}"] = v
     output_path.mkdir(exist_ok=True)
-    with open(data_path, 'rt') as file:
+    with open(eval_path, 'rt') as file:
         data = json.load(file)
     eval_set = data[eval_set]
+    if icl_path != eval_path:
+        with open(icl_path, 'rt') as file:
+            data = json.load(file)
     icl_set = data[icl_set]
     if filter_def is not None:
         before = len(icl_set)
