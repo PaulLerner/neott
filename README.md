@@ -1,3 +1,5 @@
+![logo](./viz/matos-logo.png)
+
 # neot
 Towards Machine Translation of Scientific Neologisms
 
