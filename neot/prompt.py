@@ -389,7 +389,7 @@ def main(eval_path: str, icl_path: str = None, eval_set: str = "dev", icl_set: s
     with open(eval_path, 'rt') as file:
         data = json.load(file)
     eval_set = data[eval_set]
-    if icl_path != eval_path:
+    if icl_path is not None and icl_path != eval_path:
         with open(icl_path, 'rt') as file:
             data = json.load(file)
     icl_set = data[icl_set]
