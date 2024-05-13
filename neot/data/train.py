@@ -50,8 +50,8 @@ def fill_template(item, template, icl=False, src="en", tgt="fr", src_lang="angla
         tgt_term = " " + item[tgt]["text"]
     else:
         tgt_term = ""
-    return template.format(tgt_term=tgt_term, src_lang=src_lang, tgt_lang=tgt_lang, src_term=item[src]["text"],
-                           src_def=item[def_lang]["def"]["text"])
+    return template.format(tgt_term=tgt_term, src_lang=src_lang, tgt_lang=tgt_lang,
+                           src_term=item.get(src, {}).get("text"), src_def=item[def_lang]["def"]["text"])
 
 
 class Identity:
