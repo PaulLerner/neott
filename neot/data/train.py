@@ -16,26 +16,26 @@ CHAT_USER_END = "<|im_end|>\n<|im_start|>assistant\n"
 PROMPTS = {
     "en": {
         # bawden and yvon
-        "version": "If the original version says {src_term} then the {tgt_lang} version should say :{tgt_term}",
+        "version": "If the original version says {src_term:s} then the {tgt_lang:s} version should say :{tgt_term:s}",
         # PL
-        "term": "The term {src_term} can be translated in {tgt_lang} as :{tgt_term}",
+        "term": "The term {src_term:s} can be translated in {tgt_lang:s} as :{tgt_term:s}",
         # bloomz (instruction)
-        "tatoeba_mt": "Translate the following term from {src_lang} to {tgt_lang} {src_term} :{tgt_term}",
-        "tower_base": "{src_lang} : {src_term}\n{tgt_lang} :{tgt_term}",
-        "def_chat": "Which {tgt_lang} term is defined in the following way?\n{src_def}\n{tgt_term}",
-        "def_chat2": "Generate a {tgt_lang} term that could be defined in the following way\n{src_def}\n{tgt_term}"
+        "tatoeba_mt": "Translate the following term from {src_lang:s} to {tgt_lang:s} {src_term:s} :{tgt_term:s}",
+        "tower_base": "{src_lang:s} : {src_term:s}\n{tgt_lang:s} :{tgt_term:s}",
+        "def_chat": "Which {tgt_lang:s} term is defined in the following way?\n{src_def:s}\n{tgt_term:s}",
+        "def_chat2": "Generate a {tgt_lang:s} term that could be defined in the following way\n{src_def:s}\n{tgt_term:s}"
     },
     "fr": {
-        "empty": ":{tgt_term}",
+        "empty": ":{tgt_term:s}",
         # PL
-        "term": "Le terme {src_lang} {src_term} peut se traduire en {tgt_lang} par :{tgt_term}",
-        "def": "{src_def} définit le terme :{tgt_term}",
-        "def_chat": "Quel terme est défini de la façon suivante ? (réponds seulement le terme, ne fait pas de phrases) : {src_def}\n{tgt_term}",
-        "def_chat2": "Génère un terme qui pourrait être défini de la façon suivante (réponds seulement le terme, ne fait pas de phrases) : {src_def}\n{tgt_term}",
-        "def_morph": "Génère un terme qui pourrait être défini de la façon suivante (réponds seulement le terme, ne fait pas de phrases) : {src_def}\nTu peux utiliser les procédés morphologiques suivants :\nLa préfixation, où un affixe est concaténé au début d’un mot pour en former un nouveau (pré+entraînement = préentraînement)\nLa suffixation, où l’affixation se fait à la fin du mot (généraliser+tion = généralisation)\nLa composition ordinaire, qui compose deux mots indépendants (timbre-poste)\nLa composition néoclassique, qui compose uniquement des morphèmes liés (azo+phile = azophile)\nLa composition syntagmatique, où des syntagmes qui suivent les règles syntaxiques de la langue se lexicalisent et donnent lieu à des termes, souvent non-compositionnels\n{tgt_term}",
-        "def+term": "{src_def} définit le terme {src_lang} {src_term} qui peut se traduire en {tgt_lang} par :{tgt_term}",
+        "term": "Le terme {src_lang:s} {src_term:s} peut se traduire en {tgt_lang:s} par :{tgt_term:s}",
+        "def": "{src_def:s} définit le terme :{tgt_term:s}",
+        "def_chat": "Quel terme est défini de la façon suivante ? (réponds seulement le terme, ne fait pas de phrases) : {src_def:s}\n{tgt_term:s}",
+        "def_chat2": "Génère un terme qui pourrait être défini de la façon suivante (réponds seulement le terme, ne fait pas de phrases) : {src_def:s}\n{tgt_term:s}",
+        "def_morph": "Génère un terme qui pourrait être défini de la façon suivante (réponds seulement le terme, ne fait pas de phrases) : {src_def:s}\nTu peux utiliser les procédés morphologiques suivants :\nLa préfixation, où un affixe est concaténé au début d’un mot pour en former un nouveau (pré+entraînement = préentraînement)\nLa suffixation, où l’affixation se fait à la fin du mot (généraliser+tion = généralisation)\nLa composition ordinaire, qui compose deux mots indépendants (timbre-poste)\nLa composition néoclassique, qui compose uniquement des morphèmes liés (azo+phile = azophile)\nLa composition syntagmatique, où des syntagmes qui suivent les règles syntaxiques de la langue se lexicalisent et donnent lieu à des termes, souvent non-compositionnels\n{tgt_term:s}",
+        "def+term": "{src_def:s} définit le terme {src_lang:s} {src_term:s} qui peut se traduire en {tgt_lang:s} par :{tgt_term:s}",
         # bloomz (instruction)
-        "tatoeba_mt": "Traduis le terme {src_lang} suivant en {tgt_lang} {src_term} :{tgt_term}"
+        "tatoeba_mt": "Traduis le terme {src_lang:s} suivant en {tgt_lang:s} {src_term:s} :{tgt_term:s}"
     }
 }
 LANGUAGES = {
