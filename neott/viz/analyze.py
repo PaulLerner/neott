@@ -47,9 +47,12 @@ def gather_results(data, metrics, predictions, tokenizer=None, morpher=None, fre
 
     per_dom = []
     for i, item in enumerate(data):
-        f = freq[f' {item[lang]["text"].lower().strip()} '] + 1
+        if freq is not None:
+            f = freq[f' {item[lang]["text"].lower().strip()} '] + 1
+        else:
+            f = None
         p_fr = item["fr"]["morph_label"]
-        p_en = item["en"]["morph_label"]
+        p_en = item.get("en", {}).get("morph_label", [])
         p_tgt = set(item[lang]["morph_label"])
         pred = predictions[i][0].split("\n")[0].strip()
         cps += Counter(item[lang]["morph_label"])
@@ -78,14 +81,13 @@ def gather_results(data, metrics, predictions, tokenizer=None, morpher=None, fre
         results.append({
             "Morph. Diff.": len(set(p_en).symmetric_difference(set(p_fr))),
             "EM": em,
-            "Edit dist.": editdistance.eval(item['fr']["text"], item['en']["text"]),
+            "Edit dist.": editdistance.eval(item['fr']["text"], item.get('en', {}).get("text","")),
             "Term fertility": term_fertility,
             "Word fertility": token_fertility,
-            "# words": len(item[lang]["tokens"]),
             "freq": f,
             **bi_label
         })
-        for dom in item["Dom"]:
+        for dom in item.get("Dom", []):
             per_dom.append({"Domain": dom, "EM": em})
 
     results = pd.DataFrame(results)
@@ -100,10 +102,16 @@ def gather_results(data, metrics, predictions, tokenizer=None, morpher=None, fre
     print((metrics_per_label * 100).to_latex(float_format='%.1f'))
     for label in fr_ova:
         for label_exists in fr_ova[label]:
-            fr_ova[label][label_exists] = sum(fr_ova[label][label_exists]) / len(fr_ova[label][label_exists])
+            if len(fr_ova[label][label_exists]) == 0:
+                fr_ova[label][label_exists] = 0
+            else:
+                fr_ova[label][label_exists] = sum(fr_ova[label][label_exists]) / len(fr_ova[label][label_exists])
     for label in en_ova:
         for label_exists in en_ova[label]:
-            en_ova[label][label_exists] = sum(en_ova[label][label_exists]) / len(en_ova[label][label_exists])
+            if len(en_ova[label][label_exists]) == 0:
+                en_ova[label][label_exists] = 0
+            else:
+                en_ova[label][label_exists] = sum(en_ova[label][label_exists]) / len(en_ova[label][label_exists])
     fr_ova = pd.DataFrame(fr_ova)
     en_ova = pd.DataFrame(en_ova)
 

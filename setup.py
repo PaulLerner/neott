@@ -4,8 +4,8 @@ import pkg_resources
 from setuptools import setup
 
 setup(
-    name='neot',
-    packages=['neot'],
+    name='neott',
+    packages=['neott'],
     install_requires=[
         str(r)
         for r in pkg_resources.parse_requirements(
