@@ -7,8 +7,8 @@ from torch.utils.data import DataLoader
 import pytorch_lightning as pl
 from transformers import AutoTokenizer
 
-from neot.metrics import Preprocessor
-from neot.morph.labels import MorphLabel
+from ..metrics import Preprocessor
+from ..morph.labels import MorphLabel
 
 ICL_SEP = "###"
 CHAT_USER_START = "<|im_start|>user\n"

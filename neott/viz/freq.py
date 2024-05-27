@@ -12,7 +12,7 @@ import pandas as pd
 
 import seaborn as sns
 
-from neot.utils import ListOrArg
+from ..utils import ListOrArg
 
 
 def viz(freq, output=None):

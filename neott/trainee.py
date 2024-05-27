@@ -12,7 +12,7 @@ import pytorch_lightning as pl
 from transformers import AutoModelForCausalLM, PretrainedConfig
 import torch
 
-from neot.metrics import compute_metrics
+from .metrics import compute_metrics
 
 
 @dataclass
