@@ -13,7 +13,7 @@ def get_data():
 
     for path in root.rglob("*.csv"):
         print(path)
-        domain = path.parent.name.split("-")[1]
+        domain = path.parent.name.split("-")[-1]
         table = pd.read_csv(path).dropna(subset=["TERM_EN", "TERME_FR"])
         for i, row in table.iterrows():
             if row.TEXTUAL_SUPPORT_1_EN == row.TEXTUAL_SUPPORT_1_EN and row.TEXTUAL_SUPPORT_1_EN.startswith("DEF:"):
