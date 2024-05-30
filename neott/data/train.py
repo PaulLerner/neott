@@ -69,7 +69,7 @@ class MorphCondition:
 
     def __call__(self, input_text, item, *args, **kwargs):
         special_tokens = []
-        for label in item[self.morph_lang]["morph_label"]:
+        for label in sorted(item[self.morph_lang]["morph_label"]):
             # FIXME: pattern for CroissantLLM: how to extend to other LLMs?
             special_token = f"<extra_id_{MorphLabel[label].value}>"
             assert special_token in self.vocab
@@ -82,7 +82,7 @@ class ConstantMorphCondition:
         if isinstance(morph, str):
             morph = [morph]
         special_tokens = []
-        for label in morph:
+        for label in sorted(morph):
             special_token = f"<extra_id_{MorphLabel[label].value}>"
             assert special_token in vocab
             special_tokens.append(special_token)
@@ -127,15 +127,17 @@ class TokenizerKwargs:
 
 MorphClass = {
     "morph": MorphCondition,
-    "random": Identity,
+    "identity": Identity,
     "cmorph": ConstantMorphCondition
 }
 
 
 class DataModule(pl.LightningDataModule):
+    non_tensor_keys = ["text", "morph_label"]
     def __init__(self, tokenizer_name: str = None, tokenizer_kwargs: TokenizerKwargs = TokenizerKwargs(),
                  add_prefix_space: bool = False, data_path: str = None, data_kwargs: DataKwargs = DataKwargs(),
-                 prompt_kwargs: PromptKwargs = PromptKwargs(), filter_def: str = None):
+                 prompt_kwargs: PromptKwargs = PromptKwargs(), filter_def: str = None, morph_lang: str = "fr",
+                 morph: str = None, condition: str = "identity"):
         super().__init__()
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, add_prefix_space=add_prefix_space,
                                                        add_eos_token=True)
@@ -147,23 +149,21 @@ class DataModule(pl.LightningDataModule):
         self.data_path = data_path
         self.dataset = {}
         self.data_kwargs = asdict(data_kwargs)
-        assert prompt_kwargs.n_icl == 0
         self.src_lang = LANGUAGES[prompt_kwargs.template_lang][prompt_kwargs.src]
         self.tgt_lang = LANGUAGES[prompt_kwargs.template_lang][prompt_kwargs.tgt]
-        # FIXME: tower_instruct template uses "\n" as delimiter
-        assert prompt_kwargs.template_form != "tower_instruct"
         self.template = PROMPTS[prompt_kwargs.template_lang][prompt_kwargs.template_form]
         if prompt_kwargs.fallback_template is not None:
-            assert prompt_kwargs.fallback_template != "tower_instruct"
             self.fallback_template = PROMPTS[prompt_kwargs.template_lang][prompt_kwargs.fallback_template]
         else:
             self.fallback_template = None
         self.prompt_kwargs = prompt_kwargs
+        assert not prompt_kwargs.chat
         self.filter_def = filter_def
         self.preproc = Preprocessor(prompt_kwargs.tgt)
-        self.morph_condition = MorphClass[self.prompt_kwargs.selector](vocab=self.tokenizer.vocab,
-                                                                       morph_lang=self.prompt_kwargs.morph_lang,
-                                                                       morph=self.prompt_kwargs.morph)
+        self.morph_lang = morph_lang
+        self.morph = morph
+        self.morph_condition = MorphClass[condition](vocab=self.tokenizer.vocab, morph_lang=self.morph_lang,
+                                                     morph=self.morph)
 
     def prepare_data(self):
         print("loading data...")
@@ -217,7 +217,7 @@ class DataModule(pl.LightningDataModule):
             input_text = fill_template(item, template, icl=True, src=self.prompt_kwargs.src,
                                        tgt=self.prompt_kwargs.tgt, src_lang=self.src_lang,
                                        tgt_lang=self.tgt_lang, def_lang=self.prompt_kwargs.def_lang)
-            input_text = self.morph_condition(input_text, item, self.prompt_kwargs.morph_lang, self.tokenizer.vocab)
+            input_text = self.morph_condition(input_text, item, self.morph_lang, self.tokenizer.vocab)
             input_texts.append(input_text)
         inputs = self.tokenizer(input_texts, **self.tokenizer_kwargs)
         labels = inputs['input_ids'].clone()
@@ -234,23 +234,27 @@ class DataModule(pl.LightningDataModule):
 
     def eval_collate_fn(self, items):
         self.tokenizer.add_eos_token = False
-        input_texts, target_texts = [], []
+        input_texts = []
+        keep = {k: [] for k in self.non_tensor_keys}
         for item in items:
             # no icl -> target is not part of the input (to be auto-regressively decoded)
             input_text = fill_template(item, self.template, icl=False, src=self.prompt_kwargs.src,
                                        tgt=self.prompt_kwargs.tgt, src_lang=self.src_lang,
                                        tgt_lang=self.tgt_lang, def_lang=self.prompt_kwargs.def_lang)
-            input_text = self.morph_condition(input_text, item, self.prompt_kwargs.morph_lang, self.tokenizer.vocab)
+            input_text = self.morph_condition(input_text, item, self.morph_lang, self.tokenizer.vocab)
             input_texts.append(input_text)
-            target_texts.append(item[self.prompt_kwargs.tgt]["text"])
+            for k in self.non_tensor_keys:
+                keep[k].append(item[self.prompt_kwargs.tgt][k])
         inputs = self.tokenizer(input_texts, **self.tokenizer_kwargs)
-        inputs["target_text"] = target_texts
+        inputs.update(keep)
         return inputs
 
     def transfer_batch_to_device(self, batch, device, dataloader_idx):
-        """Keep target_text in batch. Does not try to cast them as Tensor of any dtype or device."""
-        target_text = batch.pop('target_text', None)
+        """Keep strings etc in batch. Does not try to cast them as Tensor of any dtype or device."""
+        keep = {}
+        for k in self.non_tensor_keys:
+            if k in batch:
+                keep[k] = batch.pop(k)
         batch = super().transfer_batch_to_device(batch, device, dataloader_idx)
-        if target_text is not None:
-            batch['target_text'] = target_text
+        batch.update(keep)
         return batch

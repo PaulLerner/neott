@@ -102,7 +102,9 @@ class Trainee(pl.LightningModule):
         return dict(loss=loss)
 
     def eval_step(self, batch, batch_idx):
-        target_text = batch.pop("target_text")
+        keep = {}
+        for k in self.trainer.datamodule.non_tensor_keys:
+            keep[k] = batch.pop(k, None)
         batch_size, seq_len = batch["input_ids"].shape
         output = self.model.generate(return_dict_in_generate=True,
                                      pad_token_id=self.trainer.datamodule.tokenizer.pad_token_id,
@@ -115,7 +117,7 @@ class Trainee(pl.LightningModule):
         predictions_per_input = []
         for i in range(0, len(predictions), k):
             predictions_per_input.append(predictions[i: i + k])
-        return dict(predictions=predictions_per_input, targets=target_text)
+        return dict(predictions=predictions_per_input, **keep)
 
     def log(self, name, value, **kwargs):
         """Ignores None values."""
@@ -134,12 +136,13 @@ class Trainee(pl.LightningModule):
         return outputs
 
     def eval_epoch_end(self, eval_outputs):
-        predictions, targets = [], []
+        predictions, targets, morphs = [], [], []
         for eval_output in eval_outputs:
             predictions.extend(eval_output["predictions"])
-            targets.extend(eval_output["targets"])
+            targets.extend(eval_output["text"])
+            morphs.extend(eval_output["morph_label"])
         metrics = compute_metrics(predictions, targets, self.trainer.datamodule.preproc,
-                                  k=self.gen_kwargs["num_return_sequences"])
+                                  k=self.gen_kwargs["num_return_sequences"], morphs=morphs)
         return {'metrics': metrics, 'predictions': predictions}
 
     def validation_epoch_end(self, *args, **kwargs):
