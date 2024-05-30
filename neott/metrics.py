@@ -2,6 +2,9 @@ from collections import Counter
 
 import re
 import nltk
+import numpy as np
+
+from .morph.labels import MorphLabel
 
 
 def get_stopwords(lang):
@@ -44,7 +47,7 @@ def f1(pred, tgt):
     return (2 * precision * recall) / (precision + recall)
 
 
-def compute_metrics(predictions, targets, preproc, k: int = 1):
+def compute_metrics(predictions, targets, preproc, k: int = 1, morphs=None):
     ems, f1s, recalls = [], [], []
     for pred, tgt in zip(predictions, targets):
         tgt = preproc(tgt)
@@ -57,7 +60,7 @@ def compute_metrics(predictions, targets, preproc, k: int = 1):
             if em_score == 1.0:
                 break
         recalls.append(em_score)
-    return {
+    all_scores = {
         "em": sum(ems) / len(ems),
         "f1": sum(f1s) / len(f1s),
         f"recall@{k}": sum(recalls)/len(recalls),
@@ -65,3 +68,17 @@ def compute_metrics(predictions, targets, preproc, k: int = 1):
         "f1s": f1s,
         f"recalls@{k}": recalls
     }
+    if morphs is not None:
+        morph_i = {label.name: [] for label in MorphLabel}
+        for i, morph in enumerate(morphs):
+            for label in morph:
+                morph_i[label].append(i)
+        ems = np.array(ems)
+        f1s = np.array(f1s)
+        for label, i in morph_i.items():
+            if not i:
+                continue
+            i = np.array(i, dtype=int)
+            all_scores[f"em_{label}"] = ems[i].mean()
+            all_scores[f"f1_{label}"] = f1s[i].mean()
+    return all_scores
