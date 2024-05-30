@@ -130,10 +130,10 @@ class DomainExampleSelector(ExampleSelector):
     def __next__(self):
         # note this gives oracle domain -> should be considered oracle/topline
         domain = self.item.get(self.domain_key)
-        if domain is not None:
+        if domain:
             domain = np.random.choice(domain)
         # you do not want to have always the same example in the prompt for domains with fewer examples than n_icl
-        if domain is not None and self.i < self.domain_sizes.get(domain, 0):
+        if domain and self.i < self.domain_sizes.get(domain, 0):
             eg = next(self.domains[domain])
         else:
             eg = next(self.fallback)
