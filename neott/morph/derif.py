@@ -81,16 +81,16 @@ def get_leaf_morph(pos, morph_derif, native_compound):
     pos_s = " ".join(pos)
     if len(pos) > 1:
         if native_compound.search(pos_s) is not None:
-            return MorphLabel.Compound.name
-        return MorphLabel.Syntagm.name
+            return [MorphLabel.Compound.name]
+        return [MorphLabel.Syntagm.name]
     if morph_derif and morph_derif[0]:
         assert len(morph_derif) < 2
         # filter conv
         if morph_derif[0][0] in DERIF_2_NEOTT:
-            return DERIF_2_NEOTT[morph_derif[0][0]]
+            return [DERIF_2_NEOTT[morph_derif[0][0]]]
         elif len(morph_derif[0]) > 1 and morph_derif[0][1] in DERIF_2_NEOTT:
-            return DERIF_2_NEOTT[morph_derif[0][1]]
-    return None
+            return [DERIF_2_NEOTT[morph_derif[0][1]]]
+    return []
 
 
 def derifize(tagger, predictions, root_path, i=0):
