@@ -26,6 +26,7 @@ class SelectorKwargs:
     selector: str = "random"
     domain_key: str = "Dom"
     morph_lang: str = "fr"
+    morph_key: str = 'morph_label'
     morph: str = None
     start: bool = True
     definition: bool = True
@@ -151,12 +152,13 @@ class MorphExampleSelector(ExampleSelector):
         - morphologically similar FR examples (target-similar)
     """
 
-    def __init__(self, *args, morph_lang: str = "fr", **kwargs):
+    def __init__(self, *args, morph_lang: str = "fr", morph_key: str = 'morph_label', **kwargs):
         super().__init__(*args, **kwargs)
         self.lang = morph_lang
+        self.morph_key = morph_key
         morphs = {}
         for item in self.icl_set:
-            morph = tuple(sorted(MorphLabel[l].value for l in item[self.lang]['morph_label']))
+            morph = tuple(sorted(MorphLabel[l].value for l in item[self.lang][self.morph_key]))
             morphs.setdefault(morph, [])
             morphs[morph].append(item)
 
@@ -188,8 +190,9 @@ class MorphExampleSelector(ExampleSelector):
         self.infinite_morphs = infinite_morphs
 
     def __next__(self):
-        morph = tuple(sorted(MorphLabel[l].value for l in self.item[self.lang]['morph_label']))
-        return None, next(self.infinite_morphs[morph])
+        morph = tuple(sorted(MorphLabel[l].value for l in self.item[self.lang][self.morph_key]))
+        eg = next(self.infinite_morphs[morph])
+        return None, eg
 
 
 class ConstrainedMorphExampleSelector(ExampleSelector):
