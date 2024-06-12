@@ -44,12 +44,12 @@ class ExampleSelector:
         self.i = 0
         self.item = item
         while self.i < self.n_icl:
-            eg = next(self)
+            j, eg = next(self)
             # do not use self in the prompt (may happen if using eval_set as icl_set)
             if eg["id"] == item["id"]:
                 continue
             self.i += 1
-            yield eg
+            yield j, eg
 
 
 class RandomExampleSelector(ExampleSelector):
@@ -58,7 +58,7 @@ class RandomExampleSelector(ExampleSelector):
         self.icl_set = infinite_random_data(self.icl_set)
 
     def __next__(self):
-        return next(self.icl_set)
+        return None, next(self.icl_set)
 
 
 class LongestExampleSelector(ExampleSelector):
@@ -105,7 +105,7 @@ class LongestExampleSelector(ExampleSelector):
             common_chars.append(cs)
 
         for j in self.indices[i-self.n_icl: i+self.n_icl][(-np.array(common_chars)).argsort()[:self.n_icl]]:
-            yield self.icl_set[j]
+            yield j.item(), self.icl_set[j]
 
 
 class DomainExampleSelector(ExampleSelector):
@@ -137,7 +137,7 @@ class DomainExampleSelector(ExampleSelector):
             eg = next(self.domains[domain])
         else:
             eg = next(self.fallback)
-        return eg
+        return None, eg
 
 
 class MorphExampleSelector(ExampleSelector):
@@ -189,7 +189,7 @@ class MorphExampleSelector(ExampleSelector):
 
     def __next__(self):
         morph = tuple(sorted(MorphLabel[l].value for l in self.item[self.lang]['morph_label']))
-        return next(self.infinite_morphs[morph])
+        return None, next(self.infinite_morphs[morph])
 
 
 class ConstrainedMorphExampleSelector(ExampleSelector):
@@ -205,7 +205,7 @@ class ConstrainedMorphExampleSelector(ExampleSelector):
         self.morphs = infinite_random_data(morphs)
 
     def __next__(self):
-        return next(self.morphs)
+        return None, next(self.morphs)
 
 
 ExampleSelectors = dict(
@@ -228,20 +228,27 @@ class SelectorFusion:
     def __call__(self, item):
         # simply concatenate all selections (careful to control n_icl for each selector)
         for selector in self.selectors:
-            for eg in selector(item):
-                yield eg
+            for j, eg in selector(item):
+                yield j, eg
 
 
 def icl(eval_set, icl_set, template_kwargs, seed: int = 0, ppl: bool = False,
         chat: bool = False, def_lang: str = "fr", src="en", **kwargs):
     np.random.seed(seed)
     icl_gen = SelectorFusion(icl_set=icl_set, def_lang=def_lang, src=src, **kwargs)
+    icl_indices = []
     for item in eval_set:
-        icl_eg = [fill_template(eg, icl=True, def_lang=def_lang, src=src, **template_kwargs) for eg in icl_gen(item)]
+        icl_eg = []
+        icl_index = []
+        for j, eg in icl_gen(item):
+            icl_eg.append(fill_template(eg, icl=True, def_lang=def_lang, src=src, **template_kwargs))
+            icl_index.append(j)
+        icl_indices.append(icl_index)
         icl_eg.append(fill_template(item, icl=ppl, def_lang=def_lang, src=src, **template_kwargs))
         item["input_text"] = f" {ICL_SEP} ".join(icl_eg)
         if chat:
             item["input_text"] = CHAT_USER_START + item["input_text"] + CHAT_USER_END
+    return icl_indices
 
 
 def post_proc(predictions):
@@ -343,7 +350,7 @@ def prompt(eval_set, icl_set, model, tokenizer, data_collator, src: str = "en", 
     tgt_lang = LANGUAGES[template_lang][tgt]
     template = PROMPTS[template_lang][template_form]
     template_kwargs = dict(src_lang=src_lang, tgt_lang=tgt_lang, template=template, tgt=tgt)
-    icl(eval_set, icl_set, template_kwargs, ppl=ppl, **kwargs)
+    icl_indices = icl(eval_set, icl_set, template_kwargs, ppl=ppl, **kwargs)
     eval_set = DataLoader(eval_set, collate_fn=data_collator.collate_fn, shuffle=False, **asdict(data_kwargs))
     if ppl:
         losses, all_logits = compute_ppl(eval_set, model, tokenizer, device=device)
@@ -352,6 +359,7 @@ def prompt(eval_set, icl_set, model, tokenizer, data_collator, src: str = "en", 
         return {}
     else:
         output = evaluate(eval_set, model, tokenizer, gen_kwargs=asdict(gen_kwargs), preproc=preproc, device=device)
+        output["icl_indices"] = icl_indices
     metrics = {}
     for k, v in output["metrics"].items():
         if isinstance(v, float):
