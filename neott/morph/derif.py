@@ -38,7 +38,7 @@ def tag(tagger, predictions, derif_input_path, indices_path, pos_path):
     for i, prediction in enumerate(tqdm(predictions, desc="POS tagging")):
         assert len(prediction) == 1
         pos = []
-        for token in tagger(prediction[0]):
+        for token in tagger(prediction[0].strip()):
             pos.append(token.pos_)
             if token.pos_ not in SPACY_2_DERIF:
                 continue
