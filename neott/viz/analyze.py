@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 import json
 import seaborn as sns
 from collections import Counter
+
+import spacy
 from jsonargparse import CLI
 import editdistance
 import pandas as pd
@@ -15,6 +17,7 @@ from transformers import AutoTokenizer
 from ..utils import Path, load_json_line
 from ..morph.labels import MorphLabel
 from ..morph.classif import Classifier
+from ..morph.derif import derifize
 from .freq import main as viz_freq
 
 
@@ -37,7 +40,8 @@ def dist_f1(metrics, output):
     fig.savefig(output / "f1_dist.pdf")
 
 
-def gather_results(data, metrics, predictions, tokenizer=None, morpher=None, freq=None, lang: str = "fr"):
+def gather_results(data, metrics, predictions, tokenizer=None, morpher=None, freq=None, lang: str = "fr",
+                   pred_morphs=None, morph_key: str = "morph_label"):
     results = []
 
     fr_ova = {c.name: {True: [], False: []} for c in MorphLabel}
@@ -51,11 +55,15 @@ def gather_results(data, metrics, predictions, tokenizer=None, morpher=None, fre
             f = freq[f' {item[lang]["text"].lower().strip()} '] + 1
         else:
             f = None
-        p_fr = item["fr"]["morph_label"]
-        p_en = item.get("en", {}).get("morph_label", [])
-        p_tgt = set(item[lang]["morph_label"])
+        p_fr = item["fr"][morph_key]
+        p_en = item.get("en", {}).get(morph_key, [])
+        p_tgt = set(item[lang][morph_key])
+        if morph_key == "leaf_morph":
+            leaf_morph = item[lang][morph_key][0] if item[lang][morph_key] else None
+        else:
+            leaf_morph = None
         pred = predictions[i][0].split("\n")[0].strip()
-        cps += Counter(item[lang]["morph_label"])
+        cps += Counter(item[lang][morph_key])
         em = metrics["ems"][i]
 
         bi_label = {}
@@ -63,28 +71,32 @@ def gather_results(data, metrics, predictions, tokenizer=None, morpher=None, fre
             fr_ova[label.name][label.name in p_fr].append(em)
             en_ova[label.name][label.name in p_en].append(em)
             bi_label[label.name] = label.name in p_tgt
-            if morpher is not None:
-                labels = morpher(pred)
+            if pred_morphs is not None:
+                labels = pred_morphs[i]
                 if label.name in labels:
                     pps[label.name] += 1
                     if label.name in p_tgt:
                         tps[label.name] += 1
         if tokenizer is not None:
             term_fertility = len(tokenizer.tokenize(item[lang]["text"]))
-            token_fertility = []
-            for token in item[lang]["tokens"]:
-                token_fertility.append(len(tokenizer.tokenize(token)))
-            token_fertility = max(token_fertility)
+            if morpher is not None:
+                token_fertility = []
+                for token in morpher.tokenizer(item[lang]["text"]):
+                    token_fertility.append(len(tokenizer.tokenize(token.text)))
+                token_fertility = max(token_fertility)
+            else:
+                token_fertility = None
         else:
             term_fertility = None
             token_fertility = None
         results.append({
             "Morph. Diff.": len(set(p_en).symmetric_difference(set(p_fr))),
             "EM": em,
-            "Edit dist.": editdistance.eval(item['fr']["text"], item.get('en', {}).get("text","")),
+            "Edit dist.": editdistance.eval(item['fr']["text"], item.get('en', {}).get("text", "")),
             "Term fertility": term_fertility,
             "Word fertility": token_fertility,
             "freq": f,
+            "morph": leaf_morph,
             **bi_label
         })
         for dom in item.get("Dom", []):
@@ -147,17 +159,9 @@ def viz_ova(fr_ova, en_ova):
     print("FR\n", (fr_ova * 100).to_latex(float_format="%.1f"))
 
 
-def tag(pred, tagger):
-    poses = []
-    stripped_preds = [p[0].strip() for p in pred["predictions"]]
-    for doc in tagger.pipe(stripped_preds, batch_size=2048):
-        poses.append([t.pos_ for t in doc])
-
-    pred["pos"] = poses
-
-
 def main(data: Path, preds: Path, tokenizer: str = None, output: Path = None, subset: str = "test",
-         morpher: str = None, lang: str = "fr", freq_paths: Union[str, List[str]] = None):
+         morpher: str = None, tagger: str = None, lang: str = "fr", freq_paths: Union[str, List[str]] = None,
+         morph_key: str = "morph_label"):
     with open(data, "rt") as file:
         data = json.load(file)
 
@@ -167,13 +171,17 @@ def main(data: Path, preds: Path, tokenizer: str = None, output: Path = None, su
     if morpher is not None:
         morpher = Classifier(morpher, lang)
 
+    if tagger is not None:
+        print(f"{spacy.prefer_gpu()=}")
+        tagger = spacy.load(tagger)
+
     if freq_paths is not None:
         freq_fig, freq = viz_freq(freq_paths)
     else:
         freq_fig, freq = None, None
 
     outputs = []
-    for pred in load_json_line(preds):
+    for i, pred in enumerate(load_json_line(preds)):
         print(pred["hyperparameters"])
         metrics = pred["metrics"]
         for k, v in metrics.items():
@@ -181,12 +189,25 @@ def main(data: Path, preds: Path, tokenizer: str = None, output: Path = None, su
                 print(k, v)
         predictions = pred["predictions"]
         assert len(predictions) == len(data[subset])
+        pred_morphs = None
+
+        if morph_key == "morph_label":
+            if morpher is not None:
+                pred_morphs = [morpher(pred[0].split("\n")[0].strip()) for pred in predictions]
+        elif tagger is not None:
+            derif_morphs, leaf_morphs = derifize(tagger, predictions, preds.parent, i)
+            if morph_key == "leaf_morph":
+                pred_morphs = leaf_morphs
+            else:
+                pred_morphs = derif_morphs
+
         viz_f1(data[subset], pred, metrics)
         viz_wrong(data[subset], pred, metrics)
         results, per_dom, fr_ova, en_ova, *more_results = gather_results(
-            data[subset], metrics, predictions, tokenizer=tokenizer, morpher=morpher, freq=freq, lang=lang
+            data[subset], metrics, predictions, tokenizer=tokenizer, morpher=morpher, freq=freq, lang=lang,
+            pred_morphs=pred_morphs, morph_key=morph_key
         )
-        outputs.append((pred, results, per_dom, fr_ova, en_ova, *more_results))
+        outputs.append((pred, pred_morphs, results, per_dom, fr_ova, en_ova, *more_results))
         viz_ova(fr_ova, en_ova)
         if output is not None:
             output.mkdir(exist_ok=True)
