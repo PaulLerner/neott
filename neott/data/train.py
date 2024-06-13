@@ -63,13 +63,14 @@ class Identity:
 
 
 class MorphCondition:
-    def __init__(self, morph_lang, vocab, *args, **kwargs):
+    def __init__(self, morph_lang, vocab, morph_key: str = 'morph_label', *args, **kwargs):
         self.morph_lang = morph_lang
         self.vocab = vocab
+        self.morph_key = morph_key
 
     def __call__(self, input_text, item, *args, **kwargs):
         special_tokens = []
-        for label in sorted(item[self.morph_lang]["morph_label"]):
+        for label in sorted(item[self.morph_lang][self.morph_key]):
             # FIXME: pattern for CroissantLLM: how to extend to other LLMs?
             special_token = f"<extra_id_{MorphLabel[label].value}>"
             assert special_token in self.vocab
@@ -133,12 +134,13 @@ MorphClass = {
 
 
 class DataModule(pl.LightningDataModule):
-    non_tensor_keys = ["text", "morph_label"]
     def __init__(self, tokenizer_name: str = None, tokenizer_kwargs: TokenizerKwargs = TokenizerKwargs(),
                  add_prefix_space: bool = False, data_path: str = None, data_kwargs: DataKwargs = DataKwargs(),
                  prompt_kwargs: PromptKwargs = PromptKwargs(), filter_def: str = None, morph_lang: str = "fr",
-                 morph: str = None, condition: str = "identity"):
+                 morph: str = None, condition: str = "identity", morph_key: str = 'morph_label',
+                 filter_morph: bool = False):
         super().__init__()
+        self.non_tensor_keys = ["text", morph_key]
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, add_prefix_space=add_prefix_space,
                                                        add_eos_token=True)
         assert self.tokenizer.padding_side == 'left'
@@ -159,11 +161,13 @@ class DataModule(pl.LightningDataModule):
         self.prompt_kwargs = prompt_kwargs
         assert not prompt_kwargs.chat
         self.filter_def = filter_def
+        self.filter_morph = filter_morph
         self.preproc = Preprocessor(prompt_kwargs.tgt)
         self.morph_lang = morph_lang
         self.morph = morph
+        self.morph_key = morph_key
         self.morph_condition = MorphClass[condition](vocab=self.tokenizer.vocab, morph_lang=self.morph_lang,
-                                                     morph=self.morph)
+                                                     morph=self.morph, morph_key=self.morph_key)
 
     def prepare_data(self):
         print("loading data...")
@@ -176,8 +180,12 @@ class DataModule(pl.LightningDataModule):
         if self.filter_def is not None:
             before = len(self.dataset['train'])
             self.dataset['train'] = [item for item in self.dataset['train'] if item[self.filter_def]['def']['text']]
-            print(
-                f"filtered training set from {before} to {len(self.dataset['train'])} with {self.filter_def} definitions")
+            print(f"filtered training set from {before} to {len(self.dataset['train'])} with {self.filter_def} definitions")
+        if self.filter_morph:
+            before = len(self.dataset['train'])
+            self.dataset['train'] = [item for item in self.dataset['train'] if item[self.morph_lang][self.morph_key]]
+            print(f"filtered training set from {before} to {len(self.dataset['train'])} with {self.morph_lang} morphs")
+
         return DataLoader(
             self.dataset['train'],
             collate_fn=self.train_collate_fn,

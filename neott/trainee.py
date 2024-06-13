@@ -140,7 +140,7 @@ class Trainee(pl.LightningModule):
         for eval_output in eval_outputs:
             predictions.extend(eval_output["predictions"])
             targets.extend(eval_output["text"])
-            morphs.extend(eval_output["morph_label"])
+            morphs.extend(eval_output[self.trainer.datamodule.morph_key])
         metrics = compute_metrics(predictions, targets, self.trainer.datamodule.preproc,
                                   k=self.gen_kwargs["num_return_sequences"], morphs=morphs)
         return {'metrics': metrics, 'predictions': predictions}
