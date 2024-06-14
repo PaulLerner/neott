@@ -40,7 +40,7 @@ def dist_f1(metrics, output):
     fig.savefig(output / "f1_dist.pdf")
 
 
-def gather_results(data, metrics, predictions, tokenizer=None, morpher=None, freq=None, lang: str = "fr",
+def gather_results(data, metrics, tokenizer=None, morpher=None, freq=None, lang: str = "fr",
                    pred_morphs=None, morph_key: str = "morph_label"):
     results = []
 
@@ -62,21 +62,21 @@ def gather_results(data, metrics, predictions, tokenizer=None, morpher=None, fre
             leaf_morph = item[lang][morph_key][0] if item[lang][morph_key] else None
         else:
             leaf_morph = None
-        pred = predictions[i][0].split("\n")[0].strip()
         cps += Counter(item[lang][morph_key])
         em = metrics["ems"][i]
 
         bi_label = {}
-        for label in MorphLabel:
-            fr_ova[label.name][label.name in p_fr].append(em)
-            en_ova[label.name][label.name in p_en].append(em)
-            bi_label[label.name] = label.name in p_tgt
-            if pred_morphs is not None:
-                labels = pred_morphs[i]
-                if label.name in labels:
-                    pps[label.name] += 1
-                    if label.name in p_tgt:
-                        tps[label.name] += 1
+        if morph_key == "morph_label" and p_tgt:
+            for label in MorphLabel:
+                fr_ova[label.name][label.name in p_fr].append(em)
+                en_ova[label.name][label.name in p_en].append(em)
+                bi_label[label.name] = label.name in p_tgt
+                if pred_morphs is not None:
+                    labels = pred_morphs[i]
+                    if label.name in labels:
+                        pps[label.name] += 1
+                        if label.name in p_tgt:
+                            tps[label.name] += 1
         if tokenizer is not None:
             term_fertility = len(tokenizer.tokenize(item[lang]["text"]))
             if morpher is not None:
@@ -204,7 +204,7 @@ def main(data: Path, preds: Path, tokenizer: str = None, output: Path = None, su
         viz_f1(data[subset], pred, metrics)
         viz_wrong(data[subset], pred, metrics)
         results, per_dom, fr_ova, en_ova, *more_results = gather_results(
-            data[subset], metrics, predictions, tokenizer=tokenizer, morpher=morpher, freq=freq, lang=lang,
+            data[subset], metrics, tokenizer=tokenizer, morpher=morpher, freq=freq, lang=lang,
             pred_morphs=pred_morphs, morph_key=morph_key
         )
         outputs.append((pred, pred_morphs, results, per_dom, fr_ova, en_ova, *more_results))
