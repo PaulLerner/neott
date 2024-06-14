@@ -8,6 +8,7 @@ import seaborn as sns
 from collections import Counter
 
 import spacy
+import yaml
 from jsonargparse import CLI
 import editdistance
 import pandas as pd
@@ -159,11 +160,12 @@ def viz_ova(fr_ova, en_ova):
     print("FR\n", (fr_ova * 100).to_latex(float_format="%.1f"))
 
 
-def main(data: Path, preds: Path, tokenizer: str = None, output: Path = None, subset: str = "test",
+def main(data: Union[Path, dict], preds: Path, tokenizer: str = None, output: Path = None, subset: str = "test",
          morpher: str = None, tagger: str = None, lang: str = "fr", freq_paths: Union[str, List[str]] = None,
          morph_key: str = "morph_label"):
-    with open(data, "rt") as file:
-        data = json.load(file)
+    if not isinstance(data, dict):
+        with open(data, "rt") as file:
+            data = json.load(file)
 
     if tokenizer is not None:
         tokenizer = AutoTokenizer.from_pretrained(tokenizer, add_prefix_space=True)
@@ -182,7 +184,12 @@ def main(data: Path, preds: Path, tokenizer: str = None, output: Path = None, su
 
     outputs = []
     for i, pred in enumerate(load_json_line(preds)):
-        print(pred["hyperparameters"])
+        if "hyperparameters" not in pred:
+            config_path = preds.parent/"config.yaml"
+            if (config_path).exists():
+                with open(config_path) as file:
+                    pred["hyperparameters"] = yaml.safe_load(file)
+        print(pred.get("hyperparameters"))
         metrics = pred["metrics"]
         for k, v in metrics.items():
             if isinstance(v, float):
