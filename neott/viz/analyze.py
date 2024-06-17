@@ -67,7 +67,7 @@ def gather_results(data, metrics, tokenizer=None, morpher=None, freq=None, lang:
         em = metrics["ems"][i]
 
         bi_label = {}
-        if morph_key == "morph_label" and p_tgt:
+        if morph_key == "morph_label" or p_tgt:
             for label in MorphLabel:
                 fr_ova[label.name][label.name in p_fr].append(em)
                 en_ova[label.name][label.name in p_en].append(em)
