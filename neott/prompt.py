@@ -305,6 +305,7 @@ def evaluate(eval_set, model, tokenizer, gen_kwargs, preproc, device="cuda"):
     assert len(icl_sep_id) == 1, icl_sep_id
     assert tokenizer.eos_token_id is not None
     eos_token_id = [tokenizer.eos_token_id, icl_sep_id[0]]
+    token_outputs = []
     for inputs in tqdm(eval_set):
         batch_size, seq_len = inputs["input_ids"].shape
         target_text = inputs.pop("target_text")
@@ -314,10 +315,11 @@ def evaluate(eval_set, model, tokenizer, gen_kwargs, preproc, device="cuda"):
                                 pad_token_id=tokenizer.pad_token_id, **inputs, **gen_kwargs).sequences
         # keep only newly generated tokens
         if tokenizer.padding_side == 'left':
-            output = output[:, seq_len:]
+            output = output[:, seq_len:].cpu()
         else:
             raise NotImplementedError(f"{tokenizer.padding_side=}")
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+        token_outputs.append(output)
         predictions.extend(output_text)
         targets.extend(target_text)
     predictions = post_proc(predictions)
@@ -327,7 +329,7 @@ def evaluate(eval_set, model, tokenizer, gen_kwargs, preproc, device="cuda"):
     for i in range(0, len(predictions), k):
         predictions_per_input.append(predictions[i: i + k])
     metrics = compute_metrics(predictions_per_input, targets, preproc, k=k)
-    return {"metrics": metrics, "predictions": predictions_per_input}
+    return {"metrics": metrics, "predictions": predictions_per_input}, token_outputs
 
 
 class DataCollator:
@@ -361,7 +363,9 @@ def prompt(eval_set, icl_set, model, tokenizer, data_collator, src: str = "en", 
         torch.save(all_logits, output_path/"logits.bin")
         return {}
     else:
-        output = evaluate(eval_set, model, tokenizer, gen_kwargs=asdict(gen_kwargs), preproc=preproc, device=device)
+        output, token_outputs = evaluate(eval_set, model, tokenizer, gen_kwargs=asdict(gen_kwargs), preproc=preproc,
+                                         device=device)
+        torch.save(token_outputs, output_path/"tokens.bin")
         output["icl_indices"] = icl_indices
     metrics = {}
     for k, v in output["metrics"].items():
@@ -376,7 +380,7 @@ def prompt(eval_set, icl_set, model, tokenizer, data_collator, src: str = "en", 
     return metrics
 
 
-def main(eval_path: str, icl_path: str = None, eval_set: str = "dev", icl_set: str = "train",
+def main(eval_path: str = None, icl_path: str = None, eval_set: str = "dev", icl_set: str = "train",
          prompt_kwargs: PromptKwargs = PromptKwargs(), model_kwargs: ModelKwargs = ModelKwargs(),
          data_kwargs: DataKwargs = DataKwargs(), tokenizer_name: str = None,
          tokenizer_kwargs: TokenizerKwargs = TokenizerKwargs(), add_prefix_space: bool = False,
