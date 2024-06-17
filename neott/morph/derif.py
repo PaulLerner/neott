@@ -78,9 +78,10 @@ def flatten_xml(indices, derif_output_path, num_pred):
 
 
 def get_leaf_morph(pos, morph_derif, native_compound):
-    pos_s = " ".join(pos)
     if len(pos) > 1:
-        if native_compound.search(pos_s) is not None:
+        if {'ADP', 'DET', 'CCONJ'} & set(pos):
+            return [MorphLabel.Syntagm.name]
+        if native_compound.search(" ".join(pos)) is not None:
             return [MorphLabel.Compound.name]
         return [MorphLabel.Syntagm.name]
     if morph_derif and morph_derif[0]:
