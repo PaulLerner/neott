@@ -160,6 +160,7 @@ cython_debug/
 drafts/
 *.pdf
 *.drawio
+*.bkp
 
 # ipython
 *.ipynb
