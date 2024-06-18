@@ -124,7 +124,11 @@ def derifize(tagger, predictions, root_path, i=0):
             leaf_morphs_coarse.append([MorphLabel.Neoaffix.name])
         else:
             leaf_morphs_coarse.append(leaf_morph)
-    return derif_morphs, leaf_morphs, leaf_morphs_coarse
+    return {
+        "derif_morph": derif_morphs,
+        "leaf_morph": leaf_morphs,
+        "leaf_morph_coarse": leaf_morphs_coarse
+    }
 
 
 def main(data_path: Path):
@@ -134,11 +138,10 @@ def main(data_path: Path):
         data = json.load(file)
     for name, subset in data.items():
         predictions = [[item["fr"]["text"]] for item in subset]
-        derif_morphs, leaf_morphs, leaf_morphs_coarse = derifize(tagger, predictions, data_path.parent, name)
-        for derif_morph, leaf_morph, leaf_morph_coarse, item in zip(derif_morphs, leaf_morphs, leaf_morphs_coarse, subset):
-            item["fr"]["derif_morph"] = derif_morph
-            item["fr"]["leaf_morph"] = leaf_morph
-            item["fr"]["leaf_morph_coarse"] = leaf_morph_coarse
+        morphs = derifize(tagger, predictions, data_path.parent, name)
+        for i, item in enumerate(subset):
+            for k, morph in morphs.items():
+                item["fr"][k] = morph[i]
     with open(data_path, 'wt') as file:
         json.dump(data, file)
 
