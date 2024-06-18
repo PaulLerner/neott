@@ -17,6 +17,8 @@ class MorphLabel(enum.Enum):
     Neoclassical = 2
     Compound = 3
     Syntagm = 4
+    # Affixation | Neoclassical
+    Neoaffix = 5
 
 
 def get_morphy(root_path, lang):

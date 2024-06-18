@@ -113,12 +113,18 @@ def derifize(tagger, predictions, root_path, i=0):
                          ])
 
     derif_morphs = flatten_xml(indices, derif_output_path, len(predictions))
-    leaf_morphs = []
+    leaf_morphs, leaf_morphs_coarse = [], []
     # noun noun compounds OR verb noun compounds OR verb verb compounds (always with optional punct like dash N-N)
     native_compound = re.compile("((PROPN|NOUN|VERB) (PUNCT )?(PROPN|NOUN))|((VERB) (PUNCT )?VERB)")
     for pos, derif_morph in zip(poses, derif_morphs):
-        leaf_morphs.append(get_leaf_morph(pos, derif_morph, native_compound))
-    return derif_morphs, leaf_morphs
+        leaf_morph = get_leaf_morph(pos, derif_morph, native_compound)
+        leaf_morphs.append(leaf_morph)
+        # group Affixation and Neoclassical compounds + override Derif for monolexical terms that could not be analyzed
+        if (not leaf_morph) or leaf_morph[0] in {MorphLabel.Suffix.name, MorphLabel.Prefix.name, MorphLabel.Neoclassical.name}:
+            leaf_morphs_coarse.append([MorphLabel.Neoaffix.name])
+        else:
+            leaf_morphs_coarse.append(leaf_morph)
+    return derif_morphs, leaf_morphs, leaf_morphs_coarse
 
 
 def main(data_path: Path):
@@ -128,10 +134,11 @@ def main(data_path: Path):
         data = json.load(file)
     for name, subset in data.items():
         predictions = [[item["fr"]["text"]] for item in subset]
-        derif_morphs, leaf_morphs = derifize(tagger, predictions, data_path.parent, name)
-        for derif_morph, leaf_morph, item in zip(derif_morphs, leaf_morphs, subset):
+        derif_morphs, leaf_morphs, leaf_morphs_coarse = derifize(tagger, predictions, data_path.parent, name)
+        for derif_morph, leaf_morph, leaf_morph_coarse, item in zip(derif_morphs, leaf_morphs, leaf_morphs_coarse, subset):
             item["fr"]["derif_morph"] = derif_morph
             item["fr"]["leaf_morph"] = leaf_morph
+            item["fr"]["leaf_morph_coarse"] = leaf_morph_coarse
     with open(data_path, 'wt') as file:
         json.dump(data, file)
 
