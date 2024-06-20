@@ -349,7 +349,7 @@ class DataCollator:
 def prompt(eval_set, icl_set, model, tokenizer, data_collator, src: str = "en", tgt: str = "fr",
            template_lang: str = "fr", template_form: str = "term", device="cuda",
            data_kwargs: DataKwargs = DataKwargs(), gen_kwargs: GenKwargs = GenKwargs(), output_path: Path = None,
-           ppl: bool = False, **kwargs):
+           ppl: bool = False, hyperparameters=None, **kwargs):
     preproc = Preprocessor(tgt)
     src_lang = LANGUAGES[template_lang][src]
     tgt_lang = LANGUAGES[template_lang][tgt]
@@ -373,7 +373,7 @@ def prompt(eval_set, icl_set, model, tokenizer, data_collator, src: str = "en", 
             metrics[k] = v
     print(metrics)
     if output_path is not None:
-        output["hyperparameters"] = dict(template_lang=template_lang, template_form=template_form) | template_kwargs | kwargs
+        output["hyperparameters"] = hyperparameters | dict(template_lang=template_lang, template_form=template_form) | template_kwargs | kwargs
         with open(output_path / f"output.json", 'at') as file:
             json.dump(output, file)
             file.write("\n")
@@ -400,7 +400,7 @@ def main(eval_path: str = None, icl_path: str = None, eval_set: str = "dev", icl
     for i, kwarg in enumerate(selector_kwargs):
         for k, v in kwarg.items():
             hyperparameters[f"{k}_{i}"] = v
-    output_path.mkdir(exist_ok=True)
+    output_path.mkdir(exist_ok=True, parents=True)
     with open(eval_path, 'rt') as file:
         data = json.load(file)
     eval_set = data[eval_set]
@@ -428,8 +428,9 @@ def main(eval_path: str = None, icl_path: str = None, eval_set: str = "dev", icl
             continue
         metrics = prompt(eval_set, icl_set, model, tokenizer, data_collator, **kwarg,
                          device=model_kwargs.device_map, data_kwargs=data_kwargs, gen_kwargs=gen_kwargs,
-                         output_path=output_path, ppl=ppl, selector_kwargs=selector_kwargs)
-        metrics.update(kwarg|hyperparameters)
+                         output_path=output_path, ppl=ppl, selector_kwargs=selector_kwargs,
+                         hyperparameters=hyperparameters)
+        metrics.update(kwarg | hyperparameters)
         results.append(metrics)
     print(results)
     if output_path is not None:
