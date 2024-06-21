@@ -19,6 +19,7 @@ PROMPTS = {
         "version": "If the original version says {src_term:s} then the {tgt_lang:s} version should say :{tgt_term:s}",
         # PL
         "term": "The term {src_term:s} can be translated in {tgt_lang:s} as :{tgt_term:s}",
+        "def": "{src_def:s} defines the term :{tgt_term:s}",
         # bloomz (instruction)
         "tatoeba_mt": "Translate the following term from {src_lang:s} to {tgt_lang:s} {src_term:s} :{tgt_term:s}",
         "tower_base": "{src_lang:s} : {src_term:s}\n{tgt_lang:s} :{tgt_term:s}",
