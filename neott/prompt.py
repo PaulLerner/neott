@@ -3,7 +3,7 @@ import torch
 from jsonargparse import CLI
 from dataclasses import dataclass, asdict
 import json
-from typing import List
+from typing import List, Union
 
 from torch.nn import CrossEntropyLoss
 from tqdm import tqdm
@@ -196,13 +196,13 @@ class MorphExampleSelector(ExampleSelector):
 
 
 class ConstrainedMorphExampleSelector(ExampleSelector):
-    def __init__(self, *args, morph_lang: str = "fr", morph: str = None, **kwargs):
+    def __init__(self, *args, morph_lang: str = "fr", morph: str = None, morph_key: str = 'morph_label', **kwargs):
         super().__init__(*args, **kwargs)
         self.lang = morph_lang
         self.morph = MorphLabel[morph].name
         morphs = []
         for item in self.icl_set:
-            for label in item[self.lang]['morph_label']:
+            for label in item[self.lang][morph_key]:
                 if label == self.morph:
                     morphs.append(item)
         self.morphs = infinite_random_data(morphs)
@@ -385,7 +385,7 @@ def main(eval_path: str = None, icl_path: str = None, eval_set: str = "dev", icl
          data_kwargs: DataKwargs = DataKwargs(), tokenizer_name: str = None,
          tokenizer_kwargs: TokenizerKwargs = TokenizerKwargs(), add_prefix_space: bool = False,
          gen_kwargs: GenKwargs = GenKwargs(), output_path: Path = None, filter_def: str = None, ppl: bool = False,
-         selector_kwargs: List[SelectorKwargs] = None):
+         selector_kwargs: Union[SelectorKwargs, List[SelectorKwargs]] = None):
     """Prompt LLMs to generate terms (by translating them and/or given their definition)"""
     assert not (prompt_kwargs.chat and ppl)
     hyperparameters = dict(
@@ -396,6 +396,8 @@ def main(eval_path: str = None, icl_path: str = None, eval_set: str = "dev", icl
         tokenizer_name = model_kwargs.pretrained_model_name_or_path
     if selector_kwargs is None:
         selector_kwargs = [SelectorKwargs()]
+    elif not isinstance(selector_kwargs, list):
+        selector_kwargs = [selector_kwargs]
     selector_kwargs = [asdict(kwarg) for kwarg in selector_kwargs]
     for i, kwarg in enumerate(selector_kwargs):
         for k, v in kwarg.items():
