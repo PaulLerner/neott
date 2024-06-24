@@ -79,8 +79,10 @@ def compute_alignment(model_name: str, word_embeddings, vocab, START_OF_WORD_CHA
     # remove self from top-2
     if negatives == Negatives.all:
         values, indices = sim.topk(2, 1)
-        assert (start_indices == indices[:, 0]).all()
-        argmax = indices[:, 1]
+        argmax = indices[:, 0]
+        # should be everywhere
+        where = start_indices == indices[:, 0]
+        argmax[where] = indices[where, 1]
     else:
         argmax = sim.argmax(1)
 
