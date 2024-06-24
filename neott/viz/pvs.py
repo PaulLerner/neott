@@ -2,7 +2,7 @@
 # coding: utf-8
 import itertools
 import warnings
-
+import logging
 from jsonargparse import CLI
 import enum
 
@@ -12,6 +12,9 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 
+logger = logging.getLogger(__name__)
+
+
 class Negatives(enum.Enum):
     intra_pair = 0
     all_intra = 1
@@ -19,21 +22,25 @@ class Negatives(enum.Enum):
 
 
 def compute_accuracy(argmax, sorted_vocab, start_indices, intra_indices, START_OF_WORD_CHAR):
-    strict_accuracy, case_accuracy = 0, 0
-    matches_other_start = 0
+    strict_accuracy, case_accuracy, matches_other_start = 0, 0, 0
+    matches_upper = 0
     for i, pred in enumerate(argmax.tolist()):
         start_token = sorted_vocab[start_indices[i]]
         intra_token = sorted_vocab[intra_indices[pred]]
+
         if intra_token[0] == START_OF_WORD_CHAR:
             matches_other_start += 1
+
         if start_token[1:] == intra_token:
             strict_accuracy += 1
         elif start_token[1:].lower() == intra_token.lower():
             case_accuracy += 1
+        elif intra_token[0] != START_OF_WORD_CHAR and intra_token[0].isupper():
+            matches_upper += 1
         else:
             pass  # print(start_token, intra_token)
 
-    for v in [strict_accuracy, (strict_accuracy + case_accuracy), matches_other_start]:
+    for v in [strict_accuracy, (strict_accuracy + case_accuracy), matches_upper, matches_other_start]:
         print(f"{(v/len(argmax)) * 100:.1f}", end="% | ")
     print()
 
@@ -43,7 +50,7 @@ def compute_alignment(model_name: str, word_embeddings, vocab, START_OF_WORD_CHA
     not_word = re.compile(r"[^A-Za-z]")
     starts = {token[1:] for token in vocab if token[0] == START_OF_WORD_CHAR and ((not alpha_filter) or not_word.search(token[1:]) is None)}
     pairs = starts & vocab.keys()
-    print(f"{len(starts)=} {len(pairs)=}")
+    logger.debug(f"{len(starts)=} {len(pairs)=}")
 
     # defaults to Negatives.intra_pair but may get overwritten
     start_indices, intra_indices = [], []
@@ -61,13 +68,13 @@ def compute_alignment(model_name: str, word_embeddings, vocab, START_OF_WORD_CHA
     else:
         intra_indices = torch.tensor(intra_indices, dtype=int)
 
-    print(f"{len(start_indices)=} {len(intra_indices)=}")
+    logger.debug(f"{len(start_indices)=} {len(intra_indices)=}")
 
     start_embeddings = word_embeddings[start_indices]
     intra_embeddings = word_embeddings[intra_indices]
     sim = start_embeddings @ intra_embeddings.T
 
-    print(f"{sim.shape=} {sum(sim.shape)=}")
+    logger.debug(f"{sim.shape=} {sum(sim.shape)=}")
 
     # remove self from top-2
     if negatives == Negatives.all:
@@ -77,18 +84,17 @@ def compute_alignment(model_name: str, word_embeddings, vocab, START_OF_WORD_CHA
     else:
         argmax = sim.argmax(1)
 
-    print("model | filter `A-Za-z` | #pairs | negatives | P@1 (cs) | P@1 (ci) | matches other start")
-    print("------|-----------------|--------|-----------|----------|----------|--------------------")
-    print(f"{model_name} | {alpha_filter} | {len(pairs)} | {len(intra_indices)-1} {negatives.name} | ", end=" ")
+    print(f"{model_name} | {alpha_filter} | {len(pairs):,d} | {len(intra_indices)-1:,d} {negatives.name} | ", end=" ")
     compute_accuracy(argmax, sorted_vocab, start_indices, intra_indices, START_OF_WORD_CHAR)
 
 
-def main(model_name: str, alpha_filter: bool = None, negatives: Negatives = None):
+def main(model_name: str, alpha_filter: bool = None, negatives: Negatives = None, verbose: int = logging.INFO):
+    logging.basicConfig(format='%(message)s', level=verbose)
     tokenizer = AutoTokenizer.from_pretrained(model_name, add_prefix_space=True)
     vocab = tokenizer.vocab
-    print(tokenizer.tokenize("foo", " foo"))
+    logger.debug(tokenizer.tokenize("foo", " foo"))
     START_OF_WORD_CHAR = tokenizer.tokenize("foo")[0][0]
-    print(f"{START_OF_WORD_CHAR=} {len(vocab)=}")
+    logger.debug(f"{START_OF_WORD_CHAR=} {len(vocab)=}")
 
     model = AutoModelForCausalLM.from_pretrained(model_name)
     # FIXME get_input_embeddings
@@ -102,10 +108,12 @@ def main(model_name: str, alpha_filter: bool = None, negatives: Negatives = None
         word_embeddings = word_embeddings[:len(vocab)]
     norm = word_embeddings.norm(2, 1, keepdim=True)
     word_embeddings /= norm
-    print(f"{word_embeddings.shape=} {norm.shape=}")
+    logger.debug(f"{word_embeddings.shape=} {norm.shape=}")
 
     alpha_filter = [alpha_filter] if alpha_filter is not None else [False, True]
     negatives = [negatives] if negatives is not None else Negatives
+    print("model | filter `A-Za-z` | #pairs | negatives | P@1 (cs) | P@1 (ci) | matches upper | matches other start")
+    print("------|-----------------|--------|-----------|----------|----------|---------------|--------------------")
     for a, n in itertools.product(alpha_filter, negatives):
         compute_alignment(model_name, word_embeddings, vocab, START_OF_WORD_CHAR, a, n)
 
