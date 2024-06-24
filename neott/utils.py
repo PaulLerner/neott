@@ -18,6 +18,7 @@ def load_json_line(path):
 def random_data(data, n=None):
     if n is None:
         n = len(data)
+    assert n > 0
     indices = np.arange(len(data))
     np.random.shuffle(indices)
     for i in indices[:n]:
@@ -25,6 +26,7 @@ def random_data(data, n=None):
 
 
 def infinite_random_data(data):
+    assert len(data) > 0
     indices = np.arange(len(data))
     while True:
         np.random.shuffle(indices)
