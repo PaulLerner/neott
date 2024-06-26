@@ -202,7 +202,7 @@ def main(data: Union[Path, dict], preds: Path, tokenizer: str = None, output: Pa
             if morpher is not None:
                 pred_morphs = [morpher(pred[0].split("\n")[0].strip()) for pred in predictions]
         elif tagger is not None:
-            pred_morphs = derifize(tagger, predictions, preds.parent, i)[morph_key]
+            pred_morphs = derifize(tagger, predictions, preds.parent, i)[0][morph_key]
 
         viz_f1(data[subset], pred, metrics)
         viz_wrong(data[subset], pred, metrics)

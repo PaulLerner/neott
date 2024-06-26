@@ -3,7 +3,9 @@
 import json
 import os
 import subprocess
+import warnings
 import xml.etree.ElementTree as ET
+from xml.etree.ElementTree import ParseError
 from tqdm import tqdm
 import re
 from jsonargparse import CLI
@@ -43,6 +45,9 @@ def tag(tagger, predictions, derif_input_path, indices_path, pos_path):
             if token.pos_ not in SPACY_2_DERIF:
                 continue
             lemma = token.lemma_.replace("œ", "oe")
+            if "&" in lemma:
+                print(f"Skipping {lemma}")
+                continue
             try:
                 lemma.encode("ISO-8859-1")
             except UnicodeEncodeError as e:
@@ -64,7 +69,13 @@ def tag(tagger, predictions, derif_input_path, indices_path, pos_path):
 
 
 def flatten_xml(indices, derif_output_path, num_pred):
-    tree = ET.parse(derif_output_path)
+    try:
+        tree = ET.parse(derif_output_path)
+    except ParseError as e:
+        warnings.warn(f"ParseError {e}")
+        with open(derif_output_path, 'rt', encoding="ISO-8859-1") as file:
+            xml = file.read() + "</Derif>"
+        tree = ET.fromstring(xml)
     root = tree.getroot()
     morphs = [[] for _ in range(num_pred)]
     for i, lemma in enumerate(root):
@@ -124,24 +135,37 @@ def derifize(tagger, predictions, root_path, i=0):
             leaf_morphs_coarse.append([MorphLabel.Neoaffix.name])
         else:
             leaf_morphs_coarse.append(leaf_morph)
-    return {
+    morphs = {
         "derif_morph": derif_morphs,
         "leaf_morph": leaf_morphs,
         "leaf_morph_coarse": leaf_morphs_coarse
     }
+    return morphs, poses
 
 
-def main(data_path: Path):
+def main(data_path: Path, do_syn: bool = False):
     print(f"{spacy.prefer_gpu()=}")
-    tagger = spacy.load("fr_dep_news_trf")
+    tagger = spacy.load("fr_dep_news_trf", disable=["ner"])
     with open(data_path, 'rt') as file:
         data = json.load(file)
     for name, subset in data.items():
         predictions = [[item["fr"]["text"]] for item in subset]
-        morphs = derifize(tagger, predictions, data_path.parent, name)
-        for i, item in enumerate(subset):
+        morphs, poses = derifize(tagger, predictions, data_path.parent, name)
+        for i, (item, pos) in enumerate(zip(subset, poses)):
+            item["fr"]["pos"] = pos
             for k, morph in morphs.items():
                 item["fr"][k] = morph[i]
+        if do_syn:
+            indices, syns = [], []
+            for i, item in enumerate(subset):
+                for j, syn in enumerate(item["fr"]["syn"]):
+                    indices.append((i, j))
+                    syns.append([syn["text"]])
+            morphs, poses = derifize(tagger, syns, data_path.parent, "syn_"+name)
+            for l, ((i, j), pos) in enumerate(zip(indices, poses)):
+                subset[i]["fr"]["syn"][j]["pos"] = pos
+                for k, morph in morphs.items():
+                    subset[i]["fr"]["syn"][j][k] = morph[l]
     with open(data_path, 'wt') as file:
         json.dump(data, file)
 
