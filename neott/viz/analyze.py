@@ -22,20 +22,6 @@ from ..morph.derif import derifize
 from .freq import main as viz_freq
 
 
-def viz_f1(data, pred, metrics):
-    for i, item in enumerate(data[:100]):
-        f1 = metrics["f1s"][i]
-        if f1 > 0.0 and f1 < 1.0:
-            print(f1, pred['predictions'][i][0], item["fr"]["text"])
-
-
-def viz_wrong(data, pred, metrics):
-    for i, item in enumerate(data[:100]):
-        f1 = metrics["f1s"][i]
-        if f1 <= 0.0:
-            print(f1, pred['predictions'][i][0], item["fr"]["text"])
-
-
 def dist_f1(metrics, output):
     fig = sns.displot(metrics["f1s"])
     fig.savefig(output / "f1_dist.pdf")
@@ -56,7 +42,7 @@ def gather_results(data, metrics, tokenizer=None, morpher=None, freq=None, lang:
             f = freq[f' {item[lang]["text"].lower().strip()} '] + 1
         else:
             f = None
-        p_fr = item["fr"][morph_key]
+        p_fr = item.get("fr", {}).get(morph_key, [])
         p_en = item.get("en", {}).get(morph_key, [])
         p_tgt = set(item[lang][morph_key])
         if morph_key == "leaf_morph":
@@ -93,7 +79,7 @@ def gather_results(data, metrics, tokenizer=None, morpher=None, freq=None, lang:
         results.append({
             "Morph. Diff.": len(set(p_en).symmetric_difference(set(p_fr))),
             "EM": em,
-            "Edit dist.": editdistance.eval(item['fr']["text"], item.get('en', {}).get("text", "")),
+            "Edit dist.": editdistance.eval(item.get("fr", {}).get("text", ""), item.get('en', {}).get("text", "")),
             "Term fertility": term_fertility,
             "Word fertility": token_fertility,
             "freq": f,
@@ -204,8 +190,6 @@ def main(data: Union[Path, dict], preds: Path, tokenizer: str = None, output: Pa
         elif tagger is not None:
             pred_morphs = derifize(tagger, predictions, preds.parent, i)[0][morph_key]
 
-        viz_f1(data[subset], pred, metrics)
-        viz_wrong(data[subset], pred, metrics)
         results, per_dom, fr_ova, en_ova, *more_results = gather_results(
             data[subset], metrics, tokenizer=tokenizer, morpher=morpher, freq=freq, lang=lang,
             pred_morphs=pred_morphs, morph_key=morph_key
