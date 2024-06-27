@@ -1,3 +1,4 @@
+import warnings
 from collections import Counter
 
 import re
@@ -47,27 +48,42 @@ def f1(pred, tgt):
     return (2 * precision * recall) / (precision + recall)
 
 
-def compute_metrics(predictions, targets, preproc, k: int = 1, morphs=None):
-    ems, f1s, recalls = [], [], []
-    for pred, tgt in zip(predictions, targets):
+def compute_metrics(predictions, targets, syns, preproc, morphs=None):
+    ems, f1s = [], []
+    syn_ems, syn_f1s = [], []
+    for pred, tgt, syn in zip(predictions, targets, syns):
+        if len(pred) > 1:
+            warnings.warn(
+                f"Recall is deprecated, will only evaluate the first prediction out of {len(pred)}",
+                DeprecationWarning
+            )
         tgt = preproc(tgt)
-        for i in range(k):
-            p = preproc(pred[i])
-            em_score = em(p, tgt)
-            if i == 0:
-                ems.append(em_score)
-                f1s.append(f1(p, tgt))
-            if em_score == 1.0:
-                break
-        recalls.append(em_score)
+        p = preproc(pred[0])
+        ems.append(em(p, tgt))
+        f1s.append(f1(p, tgt))
+
+        syn_em = ems[-1]
+        syn_f1 = f1s[-1]
+        for s in syn:
+            s = preproc(s)
+            syn_em = max(syn_em, em(p, s))
+            syn_f1 = max(syn_f1, f1(p, s))
+        syn_ems.append(syn_em)
+        syn_f1s.append(syn_f1)
+
+    # TODO regroup variants per entry to compute concept-level scores
+
     all_scores = {
         "em": sum(ems) / len(ems),
         "f1": sum(f1s) / len(f1s),
-        f"recall@{k}": sum(recalls)/len(recalls),
+        "syn_em": sum(syn_ems) / len(syn_ems),
+        "syn_f1": sum(syn_f1s) / len(syn_f1s),
         "ems": ems,
         "f1s": f1s,
-        f"recalls@{k}": recalls
+        "syn_ems": syn_ems,
+        "syn_f1s": syn_f1s
     }
+
     if morphs is not None:
         morph_i = {label.name: [] for label in MorphLabel}
         for i, morph in enumerate(morphs):
@@ -75,10 +91,15 @@ def compute_metrics(predictions, targets, preproc, k: int = 1, morphs=None):
                 morph_i[label].append(i)
         ems = np.array(ems)
         f1s = np.array(f1s)
+        syn_ems = np.array(syn_ems)
+        syn_f1s = np.array(syn_f1s)
         for label, i in morph_i.items():
             if not i:
                 continue
             i = np.array(i, dtype=int)
             all_scores[f"em_{label}"] = ems[i].mean()
             all_scores[f"f1_{label}"] = f1s[i].mean()
+            all_scores[f"syn_em_{label}"] = syn_ems[i].mean()
+            all_scores[f"syn_f1_{label}"] = syn_f1s[i].mean()
+
     return all_scores

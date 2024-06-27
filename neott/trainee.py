@@ -136,13 +136,13 @@ class Trainee(pl.LightningModule):
         return outputs
 
     def eval_epoch_end(self, eval_outputs):
-        predictions, targets, morphs = [], [], []
+        predictions, targets, syns, morphs = [], [], [], []
         for eval_output in eval_outputs:
             predictions.extend(eval_output["predictions"])
             targets.extend(eval_output["text"])
             morphs.extend(eval_output[self.trainer.datamodule.morph_key])
-        metrics = compute_metrics(predictions, targets, self.trainer.datamodule.preproc,
-                                  k=self.gen_kwargs["num_return_sequences"], morphs=morphs)
+            syns.extend(eval_output["syn"])
+        metrics = compute_metrics(predictions, targets, syns, self.trainer.datamodule.preproc, morphs=morphs)
         return {'metrics': metrics, 'predictions': predictions}
 
     def validation_epoch_end(self, *args, **kwargs):

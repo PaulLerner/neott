@@ -139,9 +139,9 @@ class DataModule(pl.LightningDataModule):
                  add_prefix_space: bool = False, data_path: str = None, data_kwargs: DataKwargs = DataKwargs(),
                  prompt_kwargs: PromptKwargs = PromptKwargs(), filter_def: str = None, morph_lang: str = "fr",
                  morph: str = None, condition: str = "identity", morph_key: str = 'morph_label',
-                 filter_morph: bool = False):
+                 filter_morph: bool = False, split_syn: bool = False):
         super().__init__()
-        self.non_tensor_keys = ["text", morph_key]
+        self.non_tensor_keys = ["text", morph_key, "syn"]
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, add_prefix_space=add_prefix_space,
                                                        add_eos_token=True)
         assert self.tokenizer.padding_side == 'left'
@@ -167,6 +167,7 @@ class DataModule(pl.LightningDataModule):
         self.morph_lang = morph_lang
         self.morph = morph
         self.morph_key = morph_key
+        self.split_syn = split_syn
         self.morph_condition = MorphClass[condition](vocab=self.tokenizer.vocab, morph_lang=self.morph_lang,
                                                      morph=self.morph, morph_key=self.morph_key)
 
@@ -252,8 +253,42 @@ class DataModule(pl.LightningDataModule):
                                        tgt_lang=self.tgt_lang, def_lang=self.prompt_kwargs.def_lang)
             input_text = self.morph_condition(input_text, item, self.morph_lang, self.tokenizer.vocab)
             input_texts.append(input_text)
-            for k in self.non_tensor_keys:
+            for k in ["text", self.morph_key]:
                 keep[k].append(item[self.prompt_kwargs.tgt][k])
+
+            # duplicate term for every morph variant
+            if self.split_syn:
+                assert len(item[self.prompt_kwargs.tgt][self.morph_key]) == 1
+                syns_per_morph = {}
+                for syn in item[self.prompt_kwargs.tgt]['syn']:
+                    assert len(syn[self.morph_key]) == 1
+                    syns_per_morph.setdefault(syn[self.morph_key][0], [])
+                    syns_per_morph[syn[self.morph_key][0]].append(syn)
+                # the synonym of the canonical term are only those that have the same morph
+                keep["syn"].append([syn["text"] for syn in syns_per_morph.pop(item[self.prompt_kwargs.tgt][self.morph_key][0], [])])
+
+                for _, syns in syns_per_morph.items():
+                    # it does not matter which synonym we keep, they all have the same input
+                    syn = syns.pop()
+                    syn[self.prompt_kwargs.src] = {"text": item[self.prompt_kwargs.src]['text']}
+                    syn.setdefault(self.prompt_kwargs.def_lang, {})
+                    syn[self.prompt_kwargs.def_lang]["def"] = {"text": item[self.prompt_kwargs.def_lang]["def"]["text"]}
+                    syn[self.morph_lang][self.morph_key] = syn[self.morph_key]
+
+                    input_text = fill_template(syn, self.template, icl=False, src=self.prompt_kwargs.src,
+                                               tgt=self.prompt_kwargs.tgt, src_lang=self.src_lang,
+                                               tgt_lang=self.tgt_lang, def_lang=self.prompt_kwargs.def_lang)
+                    input_text = self.morph_condition(input_text, syn, self.morph_lang, self.tokenizer.vocab)
+                    input_texts.append(input_text)
+                    for k in ["text", self.morph_key]:
+                        keep[k].append(item[self.prompt_kwargs.tgt][k])
+                    # other synonyms with the same morph are kept to compute soft EM
+                    keep["syn"].append([syn["text"] for syn in syns])
+
+            # all synonyms of the term, regardless of morph
+            else:
+                keep["syn"].append([syn["text"] for syn in item[self.prompt_kwargs.tgt]['syn']])
+
         inputs = self.tokenizer(input_texts, **self.tokenizer_kwargs)
         inputs.update(keep)
         return inputs

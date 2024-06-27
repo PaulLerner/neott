@@ -1,3 +1,5 @@
+import warnings
+
 import pandas as pd
 import torch
 from jsonargparse import CLI
@@ -328,7 +330,8 @@ def evaluate(eval_set, model, tokenizer, gen_kwargs, preproc, device="cuda"):
     predictions_per_input = []
     for i in range(0, len(predictions), k):
         predictions_per_input.append(predictions[i: i + k])
-    metrics = compute_metrics(predictions_per_input, targets, preproc, k=k)
+    warnings.warn("Did not implement synonyms")
+    metrics = compute_metrics(predictions_per_input, targets, [], preproc)
     return {"metrics": metrics, "predictions": predictions_per_input}, token_outputs
 
 
