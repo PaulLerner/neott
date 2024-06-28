@@ -69,13 +69,7 @@ def tag(tagger, predictions, derif_input_path, indices_path, pos_path):
 
 
 def flatten_xml(indices, derif_output_path, num_pred):
-    try:
-        tree = ET.parse(derif_output_path)
-    except ParseError as e:
-        warnings.warn(f"ParseError {e}")
-        with open(derif_output_path, 'rt', encoding="ISO-8859-1") as file:
-            xml = file.read() + "</Derif>"
-        tree = ET.fromstring(xml)
+    tree = ET.parse(derif_output_path)
     root = tree.getroot()
     morphs = [[] for _ in range(num_pred)]
     for i, lemma in enumerate(root):
