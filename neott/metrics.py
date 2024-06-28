@@ -48,7 +48,16 @@ def f1(pred, tgt):
     return (2 * precision * recall) / (precision + recall)
 
 
-def compute_metrics(predictions, targets, syns, preproc, morphs=None):
+def pool_term_metric(variants_metric, term_indices):
+    term_metric = []
+    # term-level min-pooling
+    # e.g. a term has an EM of 1 if both its Syntagm and Compound variants have an EM of 1
+    for term_index in term_indices:
+        term_metric.append(variants_metric[np.array(term_index)].min())
+    return term_metric
+
+
+def compute_metrics(predictions, targets, syns, preproc, term_indices=None, morphs=None):
     ems, f1s = [], []
     syn_ems, syn_f1s = [], []
     for pred, tgt, syn in zip(predictions, targets, syns):
@@ -71,28 +80,35 @@ def compute_metrics(predictions, targets, syns, preproc, morphs=None):
         syn_ems.append(syn_em)
         syn_f1s.append(syn_f1)
 
-    # TODO regroup variants per entry to compute concept-level scores
-
     all_scores = {
-        "em": sum(ems) / len(ems),
-        "f1": sum(f1s) / len(f1s),
-        "syn_em": sum(syn_ems) / len(syn_ems),
-        "syn_f1": sum(syn_f1s) / len(syn_f1s),
         "ems": ems,
         "f1s": f1s,
         "syn_ems": syn_ems,
-        "syn_f1s": syn_f1s
+        "syn_f1s": syn_f1s,
+        "term_indices": term_indices
     }
+    ems = np.array(ems)
+    f1s = np.array(f1s)
+    syn_ems = np.array(syn_ems)
+    syn_f1s = np.array(syn_f1s)
+    all_scores.update({
+        "em": ems.mean(),
+        "f1": f1s.mean(),
+        "syn_em": syn_ems.mean(),
+        "syn_f1": syn_f1s.mean(),
+    })
+
+    if term_indices is not None:
+        for variants_metric, name in zip([ems, f1s, syn_ems, syn_f1s], ["ems", "f1s", "syn_ems", "syn_f1s"]):
+            term_metric = pool_term_metric(variants_metric, term_indices)
+            all_scores["term_"+name] = term_metric
+            all_scores["term_"+name[:-1]] = np.array(term_metric).mean()
 
     if morphs is not None:
         morph_i = {label.name: [] for label in MorphLabel}
         for i, morph in enumerate(morphs):
             for label in morph:
                 morph_i[label].append(i)
-        ems = np.array(ems)
-        f1s = np.array(f1s)
-        syn_ems = np.array(syn_ems)
-        syn_f1s = np.array(syn_f1s)
         for label, i in morph_i.items():
             if not i:
                 continue

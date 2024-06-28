@@ -141,7 +141,7 @@ class DataModule(pl.LightningDataModule):
                  morph: str = None, condition: str = "identity", morph_key: str = 'morph_label',
                  filter_morph: bool = False, split_syn: bool = False):
         super().__init__()
-        self.non_tensor_keys = ["text", morph_key, "syn"]
+        self.non_tensor_keys = ["text", morph_key, "syn", "term_indices"]
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, add_prefix_space=add_prefix_space,
                                                        add_eos_token=True)
         assert self.tokenizer.padding_side == 'left'
@@ -247,11 +247,13 @@ class DataModule(pl.LightningDataModule):
         input_texts = []
         keep = {k: [] for k in self.non_tensor_keys}
         for item in items:
+            term_indices = []
             # no icl -> target is not part of the input (to be auto-regressively decoded)
             input_text = fill_template(item, self.template, icl=False, src=self.prompt_kwargs.src,
                                        tgt=self.prompt_kwargs.tgt, src_lang=self.src_lang,
                                        tgt_lang=self.tgt_lang, def_lang=self.prompt_kwargs.def_lang)
             input_text = self.morph_condition(input_text, item, self.morph_lang, self.tokenizer.vocab)
+            term_indices.append(len(input_texts))
             input_texts.append(input_text)
             for k in ["text", self.morph_key]:
                 keep[k].append(item[self.prompt_kwargs.tgt][k])
@@ -279,6 +281,7 @@ class DataModule(pl.LightningDataModule):
                                                tgt=self.prompt_kwargs.tgt, src_lang=self.src_lang,
                                                tgt_lang=self.tgt_lang, def_lang=self.prompt_kwargs.def_lang)
                     input_text = self.morph_condition(input_text, syn, self.morph_lang, self.tokenizer.vocab)
+                    term_indices.append(len(input_texts))
                     input_texts.append(input_text)
                     for k in ["text", self.morph_key]:
                         keep[k].append(item[self.prompt_kwargs.tgt][k])
@@ -288,6 +291,8 @@ class DataModule(pl.LightningDataModule):
             # all synonyms of the term, regardless of morph
             else:
                 keep["syn"].append([syn["text"] for syn in item[self.prompt_kwargs.tgt]['syn']])
+
+            keep["term_indices"].append(term_indices)
 
         inputs = self.tokenizer(input_texts, **self.tokenizer_kwargs)
         inputs.update(keep)
