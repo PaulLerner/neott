@@ -328,10 +328,12 @@ def evaluate(eval_set, model, tokenizer, gen_kwargs, preproc, device="cuda"):
     k = gen_kwargs["num_return_sequences"]
     assert len(predictions) % k == 0
     predictions_per_input = []
+    syns = []
+    warnings.warn("Did not implement synonyms")
     for i in range(0, len(predictions), k):
         predictions_per_input.append(predictions[i: i + k])
-    warnings.warn("Did not implement synonyms")
-    metrics = compute_metrics(predictions_per_input, targets, [], preproc)
+        syns.append([])
+    metrics = compute_metrics(predictions_per_input, targets, syns, preproc)
     return {"metrics": metrics, "predictions": predictions_per_input}, token_outputs
 
 

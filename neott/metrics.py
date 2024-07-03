@@ -60,6 +60,7 @@ def pool_term_metric(variants_metric, term_indices):
 def compute_metrics(predictions, targets, syns, preproc, term_indices=None, morphs=None):
     ems, f1s = [], []
     syn_ems, syn_f1s = [], []
+    assert len(predictions) == len(targets) and len(predictions) == len(syns)
     for pred, tgt, syn in zip(predictions, targets, syns):
         if len(pred) > 1:
             warnings.warn(
