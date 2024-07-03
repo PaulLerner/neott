@@ -425,6 +425,9 @@ def main(eval_path: str = None, icl_path: str = None, eval_set: str = "dev", icl
         model = model.to(model_kwargs.device_map)
     model.eval()
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, add_prefix_space=add_prefix_space, add_eos_token=ppl)
+    if tokenizer.pad_token is None:
+        warnings.warn(f"{tokenizer.pad_token=}, setting to {tokenizer.eos_token=}")
+        tokenizer.pad_token = tokenizer.eos_token
     data_collator = DataCollator(tokenizer, tgt=prompt_kwargs.tgt, **asdict(tokenizer_kwargs))
     prompt_kwargs = asdict(prompt_kwargs)
     for k, v in prompt_kwargs.items():
