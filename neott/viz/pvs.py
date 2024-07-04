@@ -99,12 +99,7 @@ def main(model_name: str, alpha_filter: bool = None, negatives: Negatives = None
     logger.debug(f"{START_OF_WORD_CHAR=} {len(vocab)=}")
 
     model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True)
-    # FIXME get_input_embeddings
-    if hasattr(model, "model"):
-        word_embeddings = model.model.embed_tokens.weight
-    else:
-        word_embeddings = model.transformer.word_embeddings.weight
-    word_embeddings = word_embeddings.detach().to(torch.float32)
+    word_embeddings = model.get_input_embeddings().weight.detach().to(torch.float32)
     if len(word_embeddings) > len(vocab):
         warnings.warn(f"Trimming {word_embeddings.shape=} to {len(vocab)=}")
         word_embeddings = word_embeddings[:len(vocab)]
