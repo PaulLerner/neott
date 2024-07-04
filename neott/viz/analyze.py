@@ -154,7 +154,7 @@ def main(data: Union[Path, dict], preds: Path, tokenizer: str = None, output: Pa
             data = json.load(file)
 
     if tokenizer is not None:
-        tokenizer = AutoTokenizer.from_pretrained(tokenizer, add_prefix_space=True)
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer, add_prefix_space=True, trust_remote_code=True)
 
     if morpher is not None:
         morpher = Classifier(morpher, lang)

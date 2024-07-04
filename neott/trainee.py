@@ -76,7 +76,7 @@ class Trainee(pl.LightningModule):
     def __init__(self, *args, model_kwargs, gradient_checkpointing=False, warmup_steps=0, lr=2e-5, betas=(0.9, 0.999),
                  eps=1e-08, weight_decay=0.0, gen_kwargs: GenKwargs = GenKwargs(), **kwargs):
         super().__init__(*args, **kwargs)
-        self.model = AutoModelForCausalLM.from_pretrained(**model_kwargs)
+        self.model = AutoModelForCausalLM.from_pretrained(**model_kwargs, trust_remote_code=True)
         # scheduling and optimization
         self.warmup_steps = warmup_steps
         self.lr = lr

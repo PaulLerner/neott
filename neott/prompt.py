@@ -420,11 +420,11 @@ def main(eval_path: str = None, icl_path: str = None, eval_set: str = "dev", icl
         icl_set = [item for item in icl_set if item[filter_def]['def']['text']]
         print(f"filtered training set from {before} to {len(icl_set)} with {filter_def} definitions")
 
-    model = AutoModelForCausalLM.from_pretrained(**asdict(model_kwargs))
+    model = AutoModelForCausalLM.from_pretrained(**asdict(model_kwargs), trust_remote_code=True)
     if not model_kwargs.load_in_8bit:
         model = model.to(model_kwargs.device_map)
     model.eval()
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, add_prefix_space=add_prefix_space, add_eos_token=ppl)
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, add_prefix_space=add_prefix_space, add_eos_token=ppl, trust_remote_code=True)
     if tokenizer.pad_token is None:
         warnings.warn(f"{tokenizer.pad_token=}, setting to {tokenizer.eos_token=}")
         tokenizer.pad_token = tokenizer.eos_token

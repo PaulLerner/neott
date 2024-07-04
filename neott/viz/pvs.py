@@ -92,13 +92,13 @@ def compute_alignment(model_name: str, word_embeddings, vocab, START_OF_WORD_CHA
 
 def main(model_name: str, alpha_filter: bool = None, negatives: Negatives = None, verbose: int = logging.INFO):
     logging.basicConfig(format='%(message)s', level=verbose)
-    tokenizer = AutoTokenizer.from_pretrained(model_name, add_prefix_space=True)
+    tokenizer = AutoTokenizer.from_pretrained(model_name, add_prefix_space=True, trust_remote_code=True)
     vocab = tokenizer.vocab
     logger.debug(tokenizer.tokenize("foo", " foo"))
     START_OF_WORD_CHAR = tokenizer.tokenize("foo")[0][0]
     logger.debug(f"{START_OF_WORD_CHAR=} {len(vocab)=}")
 
-    model = AutoModelForCausalLM.from_pretrained(model_name)
+    model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True)
     # FIXME get_input_embeddings
     if hasattr(model, "model"):
         word_embeddings = model.model.embed_tokens.weight

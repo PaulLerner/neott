@@ -143,7 +143,7 @@ class DataModule(pl.LightningDataModule):
         super().__init__()
         self.non_tensor_keys = ["text", morph_key, "syn", "term_indices"]
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, add_prefix_space=add_prefix_space,
-                                                       add_eos_token=True)
+                                                       add_eos_token=True, trust_remote_code=True)
         assert self.tokenizer.padding_side == 'left'
         prompt_sep = self.tokenizer.encode(':', add_special_tokens=False)
         assert len(prompt_sep) == 1, prompt_sep
