@@ -306,7 +306,7 @@ def compute_ppl(eval_set, model, tokenizer, device="cuda"):
 
 
 def evaluate(eval_set, model, tokenizer, gen_kwargs, preproc, device="cuda"):
-    predictions, targets = [], []
+    predictions, targets, morphs, syns = [], [], [], []
     icl_sep_id = tokenizer.encode(ICL_SEP, add_special_tokens=False)
     assert len(icl_sep_id) == 1, icl_sep_id
     assert tokenizer.eos_token_id is not None
@@ -314,7 +314,9 @@ def evaluate(eval_set, model, tokenizer, gen_kwargs, preproc, device="cuda"):
     token_outputs = []
     for inputs in tqdm(eval_set):
         batch_size, seq_len = inputs["input_ids"].shape
-        target_text = inputs.pop("target_text")
+        targets.extend(inputs.pop("target_text"))
+        morphs.extend(inputs.pop("morph"))
+        syns.extend(inputs.pop("syn"))
         for k, v in inputs.items():
             inputs[k] = v.to(device)
         output = model.generate(eos_token_id=eos_token_id, return_dict_in_generate=True,
@@ -327,31 +329,36 @@ def evaluate(eval_set, model, tokenizer, gen_kwargs, preproc, device="cuda"):
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
         token_outputs.append(output)
         predictions.extend(output_text)
-        targets.extend(target_text)
     predictions = post_proc(predictions)
     k = gen_kwargs["num_return_sequences"]
     assert len(predictions) % k == 0
     predictions_per_input = []
-    syns = []
-    warnings.warn("Did not implement synonyms")
     for i in range(0, len(predictions), k):
         predictions_per_input.append(predictions[i: i + k])
-        syns.append([])
-    metrics = compute_metrics(predictions_per_input, targets, syns, preproc)
+    metrics = compute_metrics(predictions_per_input, targets, syns, preproc, morphs=morphs)
     return {"metrics": metrics, "predictions": predictions_per_input}, token_outputs
 
 
 class DataCollator:
-    def __init__(self, tokenizer, tgt: str = "fr", **kwargs):
+    def __init__(self, tokenizer, tgt: str = "fr", morph_key: str = "morph_label", **kwargs):
         self.tokenizer = tokenizer
         self.tgt = tgt
         self.kwargs = kwargs
+        self.morph_key = morph_key
 
     def collate_fn(self, items):
+        input_texts = []
+        strings = {"target_text": [], "morph": [], "syn": []}
+        for item in items:
+            input_texts.append(item["input_text"])
+            strings["target_text"].append(item[self.tgt]["text"])
+            strings["morph"].append(item[self.tgt][self.morph_key])
+            strings["syn"].append([syn["text"] for syn in item[self.tgt].get("syn", [])])
+
         # FIXME: maybe refactor with apply_chat_template?
         # https://huggingface.co/docs/transformers/main/en/chat_templating
-        inputs = self.tokenizer([item["input_text"] for item in items], **self.kwargs)
-        inputs["target_text"] = [item[self.tgt]["text"] for item in items]
+        inputs = self.tokenizer(input_texts, **self.kwargs)
+        inputs.update(strings)
         return inputs
 
 
@@ -407,6 +414,7 @@ def main(eval_path: str = None, icl_path: str = None, eval_set: str = "dev", icl
         selector_kwargs = [SelectorKwargs()]
     elif not isinstance(selector_kwargs, list):
         selector_kwargs = [selector_kwargs]
+    morph_key = selector_kwargs[0].morph_key
     selector_kwargs = [asdict(kwarg) for kwarg in selector_kwargs]
     for i, kwarg in enumerate(selector_kwargs):
         for k, v in kwarg.items():
@@ -430,9 +438,10 @@ def main(eval_path: str = None, icl_path: str = None, eval_set: str = "dev", icl
     model.eval()
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, add_prefix_space=add_prefix_space, add_eos_token=ppl, trust_remote_code=True)
     if tokenizer.pad_token is None:
+        # TODO maybe also fix and set padding_side='left'
         warnings.warn(f"{tokenizer.pad_token=}, setting to {tokenizer.eos_token=}")
         tokenizer.pad_token = tokenizer.eos_token
-    data_collator = DataCollator(tokenizer, tgt=prompt_kwargs.tgt, **asdict(tokenizer_kwargs))
+    data_collator = DataCollator(tokenizer, tgt=prompt_kwargs.tgt, morph_key=morph_key, **asdict(tokenizer_kwargs))
     prompt_kwargs = asdict(prompt_kwargs)
     for k, v in prompt_kwargs.items():
         prompt_kwargs[k] = ListOrArg(v)
