@@ -32,6 +32,7 @@ class SelectorKwargs:
     morph: str = None
     start: bool = True
     definition: bool = True
+    adversarial_morph: bool = False
 
 
 class ExampleSelector:
@@ -154,10 +155,11 @@ class MorphExampleSelector(ExampleSelector):
         - morphologically similar FR examples (target-similar)
     """
 
-    def __init__(self, *args, morph_lang: str = "fr", morph_key: str = 'morph_label', **kwargs):
+    def __init__(self, *args, morph_lang: str = "fr", morph_key: str = 'morph_label', adversarial_morph=False, **kwargs):
         super().__init__(*args, **kwargs)
         self.lang = morph_lang
         self.morph_key = morph_key
+        self.adversarial_morph = adversarial_morph
         morphs = {}
         for item in self.icl_set:
             morph = tuple(sorted(MorphLabel[l].value for l in item[self.lang][self.morph_key]))
@@ -168,10 +170,11 @@ class MorphExampleSelector(ExampleSelector):
         # should have at least n_icl examples for each possible case
         for m_o in all_size_combination(range(len(MorphLabel))):
             # easy: exact match
-            if len(morphs.get(m_o, [])) >= self.n_icl:
+            if not self.adversarial_morph and len(morphs.get(m_o, [])) >= self.n_icl:
                 infinite_morphs[m_o] = morphs[m_o]
                 continue
             # more difficult: find closest morph (e.g. only 1 difference)
+            # or farthest if adversarial_morph
             infinite_morphs[m_o] = []
             sym_diffs = {}
             for m_i in all_size_combination(range(len(MorphLabel))):
@@ -179,8 +182,9 @@ class MorphExampleSelector(ExampleSelector):
                 sym_diffs.setdefault(sym_diff, [])
                 sym_diffs[sym_diff].append(m_i)
             # maximum symmetric difference is at most |MorphLabel|
-            for diff in range(len(MorphLabel)):
-                # all equally close morph get the same chance
+            asc_or_desc = range(len(MorphLabel)-1, -1, -1) if self.adversarial_morph else range(len(MorphLabel))
+            for diff in asc_or_desc:
+                # all equally close (resp. far if adversarial_morph) morph get the same chance
                 for m_i in sym_diffs[diff]:
                     infinite_morphs[m_o] += morphs.get(m_i, [])
                 if len(infinite_morphs[m_o]) >= self.n_icl:
