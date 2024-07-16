@@ -60,20 +60,6 @@ obviously, all optional arguments are optional:
 
 If you do not rerun the experiments, you can use our outputs provided in the same repositories as the datasets (e.g. `france_terme/taln_2024/bloom-7b1/output.json`)
 
-## Data/preproc
-
-
-
-`python -m neott.data.{termium|franceterme}`
-
-
-`python -m neott.data.filter`
-
-
-
-`python -m neott.data.split`
-
-`python -m neott.tag`
 
 
 ## morph
@@ -91,10 +77,23 @@ for each language
 `python -m neott.morph.classif train`
 
 ### predict on data
-`python -m neott.morph.classif --model_path=models/morph/fr/model.bin --lang=fr predict data/symptoms/symptoms.json`
+`python -m neott.morph.classif --model_path=models/morph/fr/model.bin --lang=fr predict data/france_terme/france_terme.json`
 
-`python -m neott.morph.classif --model_path=models/morph/en/model.bin --lang=en predict data/symptoms/symptoms.json`
+`python -m neott.morph.classif --model_path=models/morph/en/model.bin --lang=en predict data/france_terme/france_terme.json`
 
+## Data/preproc
+The datasets provided through separate repositories above have been preprocessed with the following pipeline (no need to rerun).
+
+`python -m neott.data.{termium|franceterme}`
+
+
+`python -m neott.data.filter`
+
+
+
+`python -m neott.data.split`
+
+`python -m neott.tag`
 
 # citation
 If you use our code or data please cite
