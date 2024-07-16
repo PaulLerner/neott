@@ -46,9 +46,10 @@ TODO
 
 `python -m neott.freq data/france_terme/france_terme.json /gpfsdswork/dataset/OSCAR/fr_meta/ data/france_terme/freq_oscar_fr_whole_word.json --whole_word=true --batch_size=10000 --hf=false`
 
-### metrics
+### analyze
 
-You can reproduce all analyses using `neott.viz.analyze` (, tokenizer is used )
+You can reproduce all analyses using `neott.viz.analyze` 
+(note metrics are not recomputed but are stored in the output, you can recompute them using `neott.metrics`)
 
 `python -m neott.viz.analyze data/france_terme/france_terme.json exp/prompt/test/output.json --tokenizer=bigscience/bloom-7b1 --morpher=models/morph/fr/model.bin --freq_paths=data/france_terme/freq_roots_fr_whole_word.json --freq_paths+=data/france_terme/freq_oscar_fr_whole_word.json`
 
@@ -56,6 +57,8 @@ obviously, all optional arguments are optional:
 - tokenizer is used to compute fertility (TALN 2024 fig. 4)
 - morpher for morph accuracy (TALN 2024 fig. 3)
 - freq_paths for EM wrt. term occurences (TALN 2024 fig. 5)
+
+If you do not rerun the experiments, you can use our outputs provided in the same repositories as the datasets (e.g. `france_terme/taln_2024/bloom-7b1/output.json`)
 
 ## Data/preproc
 
