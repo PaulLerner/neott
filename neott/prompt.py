@@ -29,6 +29,7 @@ class SelectorKwargs:
     domain_key: str = "Dom"
     morph_lang: str = "fr"
     morph_key: str = 'morph_label'
+    affix_key: str = "leaf_affix"
     morph: str = None
     start: bool = True
     definition: bool = True
@@ -201,6 +202,44 @@ class MorphExampleSelector(ExampleSelector):
         return None, eg
 
 
+class AffixExampleSelector(ExampleSelector):
+    def __init__(self, *args, morph_lang: str = "fr", morph_key: str = 'leaf_morph', affix_key="leaf_affix", **kwargs):
+        super().__init__(*args, **kwargs)
+        self.lang = morph_lang
+        self.morph_key = morph_key
+        self.affix_key = affix_key
+
+        morphs, affixes = {}, {}
+        for item in self.icl_set:
+            morph = tuple(item[self.lang][self.morph_key])
+            assert len(morph) < 2
+            morphs.setdefault(morph, [])
+            morphs[morph].append(item)
+
+            affix = item[self.lang][self.affix_key]
+            if affix is not None:
+                affixes.setdefault(affix, [])
+                affixes[affix].append(item)
+
+        self.affix_sizes = {affix: len(terms) for affix, terms in affixes.items()}
+        for morph, terms in morphs.items():
+            morphs[morph] = infinite_random_data(terms)
+        self.morphs = morphs
+        for affix, terms in affixes.items():
+            affixes[affix] = infinite_random_data(terms)
+        self.affixes = affixes
+
+    def __next__(self):
+        affix = self.item[self.lang][self.affix_key]
+        if self.i < self.affix_sizes.get(affix, 0):
+            eg = next(self.affixes[affix])
+        else:
+            morph = tuple(self.item[self.lang][self.morph_key])
+            assert len(morph) < 2
+            eg = next(self.morphs[morph])
+        return None, eg
+
+
 class ConstrainedMorphExampleSelector(ExampleSelector):
     def __init__(self, *args, morph_lang: str = "fr", morph: str = None, morph_key: str = 'morph_label', **kwargs):
         super().__init__(*args, **kwargs)
@@ -221,6 +260,7 @@ ExampleSelectors = dict(
     random=RandomExampleSelector,
     domain=DomainExampleSelector,
     morph=MorphExampleSelector,
+    affix=AffixExampleSelector,
     cmorph=ConstrainedMorphExampleSelector,
     longest=LongestExampleSelector
 )
