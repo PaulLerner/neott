@@ -31,12 +31,12 @@ def get_data():
                 "S-dom": [row.SUBJECT_EN],
                 "en": {
                     "text": row.TERM_EN,
-                    "syn": row.SYNONYMS_EN.split(";") if row.SYNONYMS_EN == row.SYNONYMS_EN else None,
+                    "syn": [{"text": syn} for syn in row.SYNONYMS_EN.split(";")] if row.SYNONYMS_EN == row.SYNONYMS_EN else [],
                     "def": {"text": en_def},
                 },
                 "fr": {
                     "text": row.TERME_FR,
-                    "syn": row.SYNONYMES_FR.split(";") if row.SYNONYMES_FR == row.SYNONYMES_FR else None,
+                    "syn": [{"text": syn} for syn in row.SYNONYMES_FR.split(";")] if row.SYNONYMES_FR == row.SYNONYMES_FR else [],
                     "def": {"text": fr_def}
                 }
             }

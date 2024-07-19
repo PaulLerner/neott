@@ -52,11 +52,11 @@ def get_data(tree):
             "fr": {
                 "text": fr_term,
                 "def": {"text": def_fr},
-                "syn": fr_terms
+                "syn": [{"text": syn} for syn in fr_terms]
             },
             "en": {
                 "text": en_term,
-                "syn": en_terms
+                "syn": [{"text": syn} for syn in en_terms]
             },
             "id": article.attrib['numero']
         })
