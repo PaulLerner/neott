@@ -290,7 +290,7 @@ class DataModule(pl.LightningDataModule):
 
             # all synonyms of the term, regardless of morph
             else:
-                keep["syn"].append([syn["text"] for syn in item[self.prompt_kwargs.tgt]['syn']])
+                keep["syn"].append([syn["text"] for syn in item[self.prompt_kwargs.tgt].get('syn', [])])
 
             keep["term_indices"].append(term_indices)
 
