@@ -209,35 +209,94 @@ class AffixExampleSelector(ExampleSelector):
         self.morph_key = morph_key
         self.affix_key = affix_key
 
-        morphs, affixes = {}, {}
+        morphs = {}
         for item in self.icl_set:
             morph = tuple(item[self.lang][self.morph_key])
             assert len(morph) < 2
-            morphs.setdefault(morph, [])
-            morphs[morph].append(item)
-
+            morphs.setdefault(morph, {})
             affix = item[self.lang][self.affix_key]
-            if affix is not None:
-                affixes.setdefault(affix, [])
-                affixes[affix].append(item)
-
-        self.affix_sizes = {affix: len(terms) for affix, terms in affixes.items()}
-        for morph, terms in morphs.items():
-            morphs[morph] = infinite_random_data(terms)
+            morphs[morph].setdefault(affix, [])
+            morphs[morph][affix].append(item)
         self.morphs = morphs
-        for affix, terms in affixes.items():
-            affixes[affix] = infinite_random_data(terms)
-        self.affixes = affixes
 
-    def __next__(self):
-        affix = self.item[self.lang][self.affix_key]
-        if self.i < self.affix_sizes.get(affix, 0):
-            eg = next(self.affixes[affix])
-        else:
-            morph = tuple(self.item[self.lang][self.morph_key])
-            assert len(morph) < 2
-            eg = next(self.morphs[morph])
-        return None, eg
+    def __call__(self, item):
+        morph = tuple(item[self.lang][self.morph_key])
+        assert len(morph) < 2
+        affix = item[self.lang][self.affix_key]
+        n_affixes = len(self.morphs[morph].get(affix, []))
+        indices = np.random.choice(n_affixes, min(self.n_icl, n_affixes), replace=False)
+        for i in indices:
+            yield None, self.morphs[morph][affix][i]
+
+        # not enough terms with the same affix: fallback to terms with the same morph
+        if n_affixes < self.n_icl:
+            morphs = []
+            for other_affix, terms in self.morphs[morph].items():
+                if other_affix != affix:
+                    morphs += terms
+            indices = np.random.choice(len(morphs), self.n_icl-n_affixes, replace=False)
+            for i in indices:
+                yield None, morphs[i]
+
+
+class TokenAffixExampleSelector(AffixExampleSelector):
+    """For prefixes (resp. suffixes), privilege terms sharing the same initial (resp. final) token"""
+    def __init__(self, *args, tokenizer=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.tokenizer = tokenizer
+
+        for morph in [(MorphLabel.Prefix.name,), (MorphLabel.Suffix.name, )]:
+            affixes = self.morphs.pop(morph)
+            self.morphs[morph] = {}
+            for affix, terms in affixes.items():
+                for item in terms:
+                    tokens = self.tokenizer.encode(item[self.lang]["text"], add_special_tokens=False, return_tensors=None)
+                    token = tokens[0] if MorphLabel[morph[0]] is MorphLabel.Prefix else tokens[-1]
+                    affix = item[self.lang][self.affix_key]
+                    self.morphs[morph].setdefault(affix, {})
+                    self.morphs[morph][affix].setdefault(token, [])
+                    self.morphs[morph][affix][token].append(item)
+                    
+    def __call__(self, item):
+        morph = tuple(item[self.lang][self.morph_key])
+        assert len(morph) < 2
+        # not affixation -> fall back to standard selection relying only on words
+        if not (morph and MorphLabel[morph[0]] in {MorphLabel.Prefix, MorphLabel.Suffix}):
+            return super().__call__(item)
+
+        affix = item[self.lang][self.affix_key]
+        tokens = self.tokenizer.encode(item[self.lang]["text"], add_special_tokens=False, return_tensors=None)
+        token = tokens[0] if MorphLabel[morph[0]] is MorphLabel.Prefix else tokens[-1]
+        token_affixes = self.morphs[morph].get(affix, {}).get(token, [])
+
+        indices = np.random.choice(len(token_affixes), min(self.n_icl, len(token_affixes)), replace=False)
+        for i in indices:
+            print(f"{item[self.lang]['text']} {token=} {self.morphs[morph][affix][token][i][self.lang]['text']}")
+            yield None, self.morphs[morph][affix][token][i]
+        if len(token_affixes) >= self.n_icl:
+            return
+
+        # not enough terms with the same affix and token -> fallback on affix
+        affixes = []
+        for other_token, terms in self.morphs[morph].get(affix, {}).items():
+            if other_token != token:
+                affixes += terms
+        indices = np.random.choice(len(affixes), min(len(affixes), self.n_icl-len(token_affixes)), replace=False)
+        for i in indices:
+            yield None, affixes[i]
+        if len(token_affixes) + len(affixes) >= self.n_icl:
+            return
+
+        # not enough terms with the same affix: fallback to terms with the same morph
+        # FIXME: because data structure is different, cannot reuse code from AffixExampleSelector
+        morphs = []
+        for other_affix, terms in self.morphs[morph].items():
+            if other_affix != affix:
+                for t in terms.values():
+                    morphs += t
+        indices = np.random.choice(len(morphs), self.n_icl-len(affixes)-len(token_affixes), replace=False)
+        for i in indices:
+            yield None, morphs[i]
 
 
 class ConstrainedMorphExampleSelector(ExampleSelector):
@@ -261,6 +320,7 @@ ExampleSelectors = dict(
     domain=DomainExampleSelector,
     morph=MorphExampleSelector,
     affix=AffixExampleSelector,
+    token=TokenAffixExampleSelector,
     cmorph=ConstrainedMorphExampleSelector,
     longest=LongestExampleSelector
 )
@@ -411,7 +471,7 @@ def prompt(eval_set, icl_set, model, tokenizer, data_collator, src: str = "en", 
     tgt_lang = LANGUAGES[template_lang][tgt]
     template = PROMPTS[template_lang][template_form]
     template_kwargs = dict(src_lang=src_lang, tgt_lang=tgt_lang, template=template, tgt=tgt)
-    icl_indices = icl(eval_set, icl_set, template_kwargs, ppl=ppl, **kwargs)
+    icl_indices = icl(eval_set, icl_set, template_kwargs, ppl=ppl, tokenizer=data_collator.tokenizer, **kwargs)
     eval_set = DataLoader(eval_set, collate_fn=data_collator.collate_fn, shuffle=False, **asdict(data_kwargs))
     if ppl:
         losses, all_logits = compute_ppl(eval_set, model, tokenizer, device=device)
@@ -444,6 +504,9 @@ def main(eval_path: str = None, icl_path: str = None, eval_set: str = "dev", icl
          selector_kwargs: Union[SelectorKwargs, List[SelectorKwargs]] = None):
     """Prompt LLMs to generate terms (by translating them and/or given their definition)"""
     assert not (prompt_kwargs.chat and ppl)
+    if eval_set == icl_set and (icl_path is None or icl_path == eval_path):
+        warnings.warn(f"Using the same dataset for eval and ICL (got {eval_path}/{eval_set}) "
+                      f"is deprecated and not supported by AffixExampleSelector")
     hyperparameters = dict(
         eval_path=eval_path, icl_path=icl_path, eval_set=eval_set, icl_set=icl_set,
         model=model_kwargs.pretrained_model_name_or_path
