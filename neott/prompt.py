@@ -262,7 +262,9 @@ class TokenAffixExampleSelector(AffixExampleSelector):
         assert len(morph) < 2
         # not affixation -> fall back to standard selection relying only on words
         if not (morph and MorphLabel[morph[0]] in {MorphLabel.Prefix, MorphLabel.Suffix}):
-            return super().__call__(item)
+            for j, eg in super().__call__(item):
+                yield j, eg
+            return
 
         affix = item[self.lang][self.affix_key]
         tokens = self.tokenizer.encode(item[self.lang]["text"], add_special_tokens=False, return_tensors=None)
@@ -271,7 +273,6 @@ class TokenAffixExampleSelector(AffixExampleSelector):
 
         indices = np.random.choice(len(token_affixes), min(self.n_icl, len(token_affixes)), replace=False)
         for i in indices:
-            print(f"{item[self.lang]['text']} {token=} {self.morphs[morph][affix][token][i][self.lang]['text']}")
             yield None, self.morphs[morph][affix][token][i]
         if len(token_affixes) >= self.n_icl:
             return
