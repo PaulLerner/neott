@@ -3,6 +3,11 @@
 # neott
 Towards Machine Translation of Scientific Neologisms
 
+# anonymous datasets
+
+- TERMIUM https://anonymous.4open.science/r/termium-3F52/
+- FranceTerme https://anonymous.4open.science/r/france_terme-2445/
+
 # Installation
 ```bash
 conda create --name=neott python=3.10 
