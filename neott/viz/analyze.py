@@ -27,8 +27,8 @@ def dist_f1(metrics, output):
     fig.savefig(output / "f1_dist.pdf")
 
 
-def gather_results(data, metrics, tokenizer=None, morpher=None, freq=None, lang: str = "fr",
-                   pred_morphs=None, morph_key: str = "morph_label"):
+def gather_results(data, metrics, tokenizer=None, morpher=None, freq=None, src: str = "en", tgt: str = "fr",
+                   pred_morphs=None, morph_key: str = "morph_label", predictions=None):
     results = []
 
     fr_ova = {c.name: {True: [], False: []} for c in MorphLabel}
@@ -39,17 +39,17 @@ def gather_results(data, metrics, tokenizer=None, morpher=None, freq=None, lang:
     per_dom = []
     for i, item in enumerate(data):
         if freq is not None:
-            f = freq[f' {item[lang]["text"].lower().strip()} '] + 1
+            f = freq[f' {item[tgt]["text"].lower().strip()} '] + 1
         else:
             f = None
-        p_fr = item.get("fr", {}).get(morph_key, [])
-        p_en = item.get("en", {}).get(morph_key, [])
-        p_tgt = set(item[lang][morph_key])
+        p_fr = item.get(tgt, {}).get(morph_key, [])
+        p_en = item.get(src, {}).get(morph_key, [])
+        p_tgt = set(item[tgt][morph_key])
         if morph_key == "leaf_morph":
-            leaf_morph = item[lang][morph_key][0] if item[lang][morph_key] else None
+            leaf_morph = item[tgt][morph_key][0] if item[tgt][morph_key] else None
         else:
             leaf_morph = None
-        cps += Counter(item[lang][morph_key])
+        cps += Counter(item[tgt][morph_key])
         em = metrics["ems"][i]
 
         bi_label = {}
@@ -65,10 +65,10 @@ def gather_results(data, metrics, tokenizer=None, morpher=None, freq=None, lang:
                         if label.name in p_tgt:
                             tps[label.name] += 1
         if tokenizer is not None:
-            term_fertility = len(tokenizer.tokenize(item[lang]["text"]))
+            term_fertility = len(tokenizer.tokenize(item[tgt]["text"]))
             if morpher is not None:
                 token_fertility = []
-                for token in morpher.tokenizer(item[lang]["text"]):
+                for token in morpher.tokenizer(item[tgt]["text"]):
                     token_fertility.append(len(tokenizer.tokenize(token.text)))
                 token_fertility = max(token_fertility)
             else:
@@ -76,10 +76,15 @@ def gather_results(data, metrics, tokenizer=None, morpher=None, freq=None, lang:
         else:
             term_fertility = None
             token_fertility = None
+        ref_ed = editdistance.eval(item.get(tgt, {}).get("text", "").strip(), item.get(src, {}).get("text", "").strip())
+        if predictions is not None:
+            assert len(predictions[i]) == 1
+            pred_ed = editdistance.eval(predictions[i][0].strip(), item[src]["text"].strip())
         results.append({
             "Morph. Diff.": len(set(p_en).symmetric_difference(set(p_fr))),
             "EM": em,
-            "Edit dist.": editdistance.eval(item.get("fr", {}).get("text", ""), item.get('en', {}).get("text", "")),
+            "src-ref edit dist.": ref_ed,
+            "src-pred edit dist.": pred_ed,
             "Term fertility": term_fertility,
             "Word fertility": token_fertility,
             "freq": f,
@@ -147,7 +152,7 @@ def viz_ova(fr_ova, en_ova):
 
 
 def main(data: Union[Path, dict], preds: Path, tokenizer: str = None, output: Path = None, subset: str = "test",
-         morpher: str = None, tagger: str = None, lang: str = "fr", freq_paths: Union[str, List[str]] = None,
+         morpher: str = None, tagger: str = None, src: str = "en", tgt: str = "fr", freq_paths: Union[str, List[str]] = None,
          morph_key: str = "morph_label"):
     if not isinstance(data, dict):
         with open(data, "rt") as file:
@@ -157,7 +162,7 @@ def main(data: Union[Path, dict], preds: Path, tokenizer: str = None, output: Pa
         tokenizer = AutoTokenizer.from_pretrained(tokenizer, add_prefix_space=True, trust_remote_code=True)
 
     if morpher is not None:
-        morpher = Classifier(morpher, lang)
+        morpher = Classifier(morpher, tgt)
 
     if tagger is not None:
         print(f"{spacy.prefer_gpu()=}")
@@ -191,8 +196,8 @@ def main(data: Union[Path, dict], preds: Path, tokenizer: str = None, output: Pa
             pred_morphs = derifize(tagger, predictions, preds.parent, i)[0][morph_key]
 
         results, per_dom, fr_ova, en_ova, *more_results = gather_results(
-            data[subset], metrics, tokenizer=tokenizer, morpher=morpher, freq=freq, lang=lang,
-            pred_morphs=pred_morphs, morph_key=morph_key
+            data[subset], metrics, tokenizer=tokenizer, morpher=morpher, freq=freq, src=src, tgt=tgt,
+            pred_morphs=pred_morphs, morph_key=morph_key, predictions=predictions
         )
         outputs.append((pred, pred_morphs, results, per_dom, fr_ova, en_ova, *more_results))
         viz_ova(fr_ova, en_ova)
