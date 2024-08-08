@@ -14,6 +14,8 @@ import editdistance
 import pandas as pd
 
 from transformers import AutoTokenizer
+import pytorch_lightning as pl
+from pytorch_lightning.cli import LightningCLI
 
 from ..utils import Path, load_json_line
 from ..morph.labels import MorphLabel
@@ -153,7 +155,7 @@ def viz_ova(fr_ova, en_ova):
 
 def main(data: Union[Path, dict], preds: Path, tokenizer: str = None, output: Path = None, subset: str = "test",
          morpher: str = None, tagger: str = None, src: str = "en", tgt: str = "fr", freq_paths: Union[str, List[str]] = None,
-         morph_key: str = "morph_label"):
+         morph_key: str = "morph_label", neoseg_path: str = None):
     if not isinstance(data, dict):
         with open(data, "rt") as file:
             data = json.load(file)
@@ -192,6 +194,26 @@ def main(data: Union[Path, dict], preds: Path, tokenizer: str = None, output: Pa
         if morph_key == "morph_label":
             if morpher is not None:
                 pred_morphs = [morpher(pred[0].split("\n")[0].strip()) for pred in predictions]
+        elif morph_key == "neoseg_morph":
+            # convert from pred to dataset format
+            p_items = {subset: [{tgt: {"text": p[0].strip()}} for p in predictions]}
+            p_items_path = preds.parent/f"{i}_predictions_items.json"
+            with open(p_items_path, "wt") as file:
+                json.dump(p_items, file)
+            # load and run neoseg (based on lightning)
+            with open(neoseg_path, 'rt') as file:
+                neoseg_config = yaml.safe_load(file)
+            neoseg_config["data"]['init_args']["predict_path"] = p_items_path
+            neoseg_config = {"predict": neoseg_config}
+            LightningCLI(
+                args=neoseg_config,
+                trainer_class=pl.Trainer,
+                seed_everything_default=0
+            )
+            # load and convert back from dataset to pred
+            with open(p_items_path, "rt") as file:
+                p_items = json.load(file)
+            pred_morphs = [item[tgt]["neoseg_morph"] for item in p_items[subset]]
         elif tagger is not None:
             pred_morphs = derifize(tagger, predictions, preds.parent, i)[0][morph_key]
 
