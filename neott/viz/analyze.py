@@ -33,8 +33,8 @@ def gather_results(data, metrics, tokenizer=None, morpher=None, freq=None, src: 
                    pred_morphs=None, morph_key: str = "morph_label", predictions=None):
     results = []
 
-    fr_ova = {c.name: {True: [], False: []} for c in MorphLabel}
-    en_ova = {c.name: {True: [], False: []} for c in MorphLabel}
+    tgt_ova = {c.name: {True: [], False: []} for c in MorphLabel}
+    src_ova = {c.name: {True: [], False: []} for c in MorphLabel}
     tps = Counter({c.name: 0 for c in MorphLabel})
     pps, cps = tps.copy(), tps.copy()
 
@@ -44,22 +44,24 @@ def gather_results(data, metrics, tokenizer=None, morpher=None, freq=None, src: 
             f = freq[f' {item[tgt]["text"].lower().strip()} '] + 1
         else:
             f = None
-        p_fr = item.get(tgt, {}).get(morph_key, [])
-        p_en = item.get(src, {}).get(morph_key, [])
-        p_tgt = set(item[tgt][morph_key])
-        if morph_key == "leaf_morph":
-            leaf_morph = item[tgt][morph_key][0] if item[tgt][morph_key] else None
+        p_tgt = item.get(tgt, {}).get(morph_key, [])
+        p_src = item.get(src, {}).get(morph_key, [])
+        if morph_key != "morph_label":
+            tgt_leaf_morph = item[tgt][morph_key][0] if item[tgt][morph_key] else None
+            src_leaf_morph = item[src][morph_key][0] if item[src][morph_key] else None
         else:
-            leaf_morph = None
+            tgt_leaf_morph = None
+            src_leaf_morph = None
         cps += Counter(item[tgt][morph_key])
         em = metrics["ems"][i]
 
-        bi_label = {}
+        src_bi_label, tgt_bi_label = {}, {}
         if morph_key == "morph_label" or p_tgt:
             for label in MorphLabel:
-                fr_ova[label.name][label.name in p_fr].append(em)
-                en_ova[label.name][label.name in p_en].append(em)
-                bi_label[label.name] = label.name in p_tgt
+                tgt_ova[label.name][label.name in p_tgt].append(em)
+                src_ova[label.name][label.name in p_src].append(em)
+                tgt_bi_label[f"tgt-{label.name}"] = label.name in p_tgt
+                src_bi_label[f"src-{label.name}"] = label.name in p_src
                 if pred_morphs is not None:
                     labels = pred_morphs[i]
                     if label.name in labels:
@@ -83,15 +85,17 @@ def gather_results(data, metrics, tokenizer=None, morpher=None, freq=None, src: 
             assert len(predictions[i]) == 1
             pred_ed = editdistance.eval(predictions[i][0].strip(), item[src]["text"].strip())
         results.append({
-            "Morph. Diff.": len(set(p_en).symmetric_difference(set(p_fr))),
+            "Morph. Diff.": len(set(p_src).symmetric_difference(set(p_tgt))),
             "EM": em,
             "src-ref edit dist.": ref_ed,
             "src-pred edit dist.": pred_ed,
             "Term fertility": term_fertility,
             "Word fertility": token_fertility,
             "freq": f,
-            "morph": leaf_morph,
-            **bi_label
+            "tgt-morph": tgt_leaf_morph,
+            "src-morph": src_leaf_morph,
+            **src_bi_label,
+            **tgt_bi_label
         })
         for dom in item.get("Dom", []):
             per_dom.append({"Domain": dom, "EM": em})
@@ -106,22 +110,22 @@ def gather_results(data, metrics, tokenizer=None, morpher=None, freq=None, src: 
     metrics_per_label['f1'] = (2 * metrics_per_label['precision'] * metrics_per_label['recall']) / (
             metrics_per_label['precision'] + metrics_per_label['recall'])
     print((metrics_per_label * 100).to_latex(float_format='%.1f'))
-    for label in fr_ova:
-        for label_exists in fr_ova[label]:
-            if len(fr_ova[label][label_exists]) == 0:
-                fr_ova[label][label_exists] = 0
+    for label in tgt_ova:
+        for label_exists in tgt_ova[label]:
+            if len(tgt_ova[label][label_exists]) == 0:
+                tgt_ova[label][label_exists] = 0
             else:
-                fr_ova[label][label_exists] = sum(fr_ova[label][label_exists]) / len(fr_ova[label][label_exists])
-    for label in en_ova:
-        for label_exists in en_ova[label]:
-            if len(en_ova[label][label_exists]) == 0:
-                en_ova[label][label_exists] = 0
+                tgt_ova[label][label_exists] = sum(tgt_ova[label][label_exists]) / len(tgt_ova[label][label_exists])
+    for label in src_ova:
+        for label_exists in src_ova[label]:
+            if len(src_ova[label][label_exists]) == 0:
+                src_ova[label][label_exists] = 0
             else:
-                en_ova[label][label_exists] = sum(en_ova[label][label_exists]) / len(en_ova[label][label_exists])
-    fr_ova = pd.DataFrame(fr_ova)
-    en_ova = pd.DataFrame(en_ova)
+                src_ova[label][label_exists] = sum(src_ova[label][label_exists]) / len(src_ova[label][label_exists])
+    tgt_ova = pd.DataFrame(tgt_ova)
+    src_ova = pd.DataFrame(src_ova)
 
-    return results, per_dom, fr_ova, en_ova, metrics_per_label, tps, pps, cps
+    return results, per_dom, tgt_ova, src_ova, metrics_per_label, tps, pps, cps
 
 
 def viz_dom(per_dom, output):
@@ -148,9 +152,9 @@ def viz_dists(results, tokenizer=None, **kwargs):
         viz_dist(results, x, **kwargs)
 
 
-def viz_ova(fr_ova, en_ova):
-    print("EN\n", (en_ova * 100).to_latex(float_format="%.1f"))
-    print("FR\n", (fr_ova * 100).to_latex(float_format="%.1f"))
+def viz_ova(tgt_ova, src_ova):
+    print("EN\n", (src_ova * 100).to_latex(float_format="%.1f"))
+    print("FR\n", (tgt_ova * 100).to_latex(float_format="%.1f"))
 
 
 def main(data: Union[Path, dict], preds: Path, tokenizer: str = None, output: Path = None, subset: str = "test",
@@ -217,12 +221,12 @@ def main(data: Union[Path, dict], preds: Path, tokenizer: str = None, output: Pa
         elif tagger is not None:
             pred_morphs = derifize(tagger, predictions, preds.parent, i)[0][morph_key]
 
-        results, per_dom, fr_ova, en_ova, *more_results = gather_results(
+        results, per_dom, tgt_ova, src_ova, *more_results = gather_results(
             data[subset], metrics, tokenizer=tokenizer, morpher=morpher, freq=freq, src=src, tgt=tgt,
             pred_morphs=pred_morphs, morph_key=morph_key, predictions=predictions
         )
-        outputs.append((pred, pred_morphs, results, per_dom, fr_ova, en_ova, *more_results))
-        viz_ova(fr_ova, en_ova)
+        outputs.append((pred, pred_morphs, results, per_dom, tgt_ova, src_ova, *more_results))
+        viz_ova(tgt_ova, src_ova)
         if output is not None:
             output.mkdir(exist_ok=True)
             dist_f1(metrics, output)
