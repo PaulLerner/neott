@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
 from jsonargparse import CLI
-import yaml
-
-from . import trainee
 from .utils import Path, load_lightning
 
 
