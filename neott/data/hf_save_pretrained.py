@@ -10,10 +10,10 @@ def main(output: str, names: List[str] = None, cache_dir: str = None):
     output = Path(output)
     output.mkdir(exist_ok=True)
     for name in names:
-        tokenizer = AutoTokenizer.from_pretrained(name, cache_dir=cache_dir, trust_remote_code=True)
-        model = AutoModelForCausalLM.from_pretrained(name, cache_dir=cache_dir, trust_remote_code=True)
         output_path = output / name.split("/")[-1]
+        tokenizer = AutoTokenizer.from_pretrained(name, cache_dir=cache_dir, trust_remote_code=True)
         tokenizer.save_pretrained(output_path)
+        model = AutoModelForCausalLM.from_pretrained(name, cache_dir=cache_dir, trust_remote_code=True)
         model.save_pretrained(output_path)
 
 
