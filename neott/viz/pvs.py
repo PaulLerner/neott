@@ -90,9 +90,12 @@ def compute_alignment(model_name: str, word_embeddings, vocab, START_OF_WORD_CHA
     compute_accuracy(argmax, sorted_vocab, start_indices, intra_indices, START_OF_WORD_CHAR)
 
 
-def main(model_name: str, alpha_filter: bool = None, negatives: Negatives = None, verbose: int = logging.INFO):
+def main(model_name: str, alpha_filter: bool = None, negatives: Negatives = None, tokenizer_name: str = None,
+         verbose: int = logging.INFO):
     logging.basicConfig(format='%(message)s', level=verbose)
-    tokenizer = AutoTokenizer.from_pretrained(model_name, add_prefix_space=True, trust_remote_code=True)
+    if tokenizer_name is None:
+        tokenizer_name = model_name
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, add_prefix_space=True, trust_remote_code=True)
     vocab = tokenizer.vocab
     logger.debug(tokenizer.tokenize("foo", " foo"))
     START_OF_WORD_CHAR = tokenizer.tokenize("foo")[0][0]
