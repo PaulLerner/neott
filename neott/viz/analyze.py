@@ -198,7 +198,7 @@ def main(data: Union[Path, dict], preds: Path, tokenizer: str = None, output: Pa
         if morph_key == "morph_label":
             if morpher is not None:
                 pred_morphs = [morpher(pred[0].split("\n")[0].strip()) for pred in predictions]
-        elif morph_key == "neoseg_morph":
+        elif morph_key == "neoseg_morph" and neoseg_path is not None:
             # convert from pred to dataset format
             p_items = {subset: [{tgt: {"text": p[0].strip()}} for p in predictions]}
             p_items_path = preds.parent/f"{i}_predictions_items.json"
