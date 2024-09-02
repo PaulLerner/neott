@@ -69,26 +69,33 @@ def gather_results(data, metrics, tokenizer=None, morpher=None, freq=None, src: 
                         if label.name in p_tgt:
                             tps[label.name] += 1
         if tokenizer is not None:
-            term_fertility = len(tokenizer.tokenize(item[tgt]["text"]))
+            tgt_tokens = tokenizer.tokenize(item[tgt]["text"].strip())
+            src_tokens = tokenizer.tokenize(item[src]["text"].strip())
+            term_fertility = len(tgt_tokens)
+            bpe_ref_ed = editdistance.eval(tgt_tokens, src_tokens)
             if morpher is not None:
                 token_fertility = []
-                for token in morpher.tokenizer(item[tgt]["text"]):
+                for token in morpher.tokenizer(item[tgt]["text"].strip()):
                     token_fertility.append(len(tokenizer.tokenize(token.text)))
                 token_fertility = max(token_fertility)
             else:
                 token_fertility = None
         else:
+            bpe_ref_ed = None
             term_fertility = None
             token_fertility = None
         ref_ed = editdistance.eval(item.get(tgt, {}).get("text", "").strip(), item.get(src, {}).get("text", "").strip())
         if predictions is not None:
             assert len(predictions[i]) == 1
             pred_ed = editdistance.eval(predictions[i][0].strip(), item[src]["text"].strip())
+        else:
+            pred_ed = None
         results.append({
             "Morph. Diff.": len(set(p_src).symmetric_difference(set(p_tgt))),
             "EM": em,
             "src-ref edit dist.": ref_ed,
             "src-pred edit dist.": pred_ed,
+            "src-ref BPE edit dist.": bpe_ref_ed,
             "Term fertility": term_fertility,
             "Word fertility": token_fertility,
             "freq": f,
