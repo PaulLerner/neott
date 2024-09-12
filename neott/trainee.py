@@ -8,7 +8,7 @@ import json
 from torch.nn import CrossEntropyLoss
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import LambdaLR
-import pytorch_lightning as pl
+import lightning as pl
 from transformers import AutoModelForCausalLM, PretrainedConfig
 import torch
 

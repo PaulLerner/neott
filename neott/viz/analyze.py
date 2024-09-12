@@ -14,8 +14,8 @@ import editdistance
 import pandas as pd
 
 from transformers import AutoTokenizer
-import pytorch_lightning as pl
-from pytorch_lightning.cli import LightningCLI
+import lightning as pl
+from lightning.cli import LightningCLI
 
 from ..utils import Path, load_json_line
 from ..morph.labels import MorphLabel

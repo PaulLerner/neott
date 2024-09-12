@@ -1,5 +1,5 @@
-import pytorch_lightning as pl
-from pytorch_lightning.cli import LightningCLI
+import lightning as pl
+from lightning.cli import LightningCLI
 
 
 def main():

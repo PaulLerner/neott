@@ -4,7 +4,7 @@ from typing import Optional, Union, List
 
 from torch.utils.data import DataLoader
 
-import pytorch_lightning as pl
+import lightning as pl
 from transformers import AutoTokenizer
 
 from ..metrics import Preprocessor
