@@ -16,7 +16,7 @@ bitsandbytes==0.42.0
 fasttext @ git+https://github.com/facebookresearch/fastText@b733943e84263f432fa47588643822194ee03dd1
 lightning==1.9.5
 
-# pytorch: better use conda
-# conda install pytorch==2.1.1 torchvision==0.16.1 torchaudio==2.1.1 pytorch-cuda=11.8 -c pytorch -c nvidia
-pytorch==2.1.1
-pytorch-cuda==12.1
+# pytorch: better use mamba
+# mamba install pytorch=2.4.1 torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia
+#pytorch==2.4.1
+#pytorch-cuda==12.1

@@ -8,10 +8,13 @@ by Lerner and Yvon (2024, referred to as TALN 2024 hereafter).
 Work done within the [MaTOS](https://anr-matos.github.io/) ANR project.
 
 # Installation
+
+First install pytorch via [mamba](https://github.com/mamba-org/mamba) then use pip
+
 ```bash
-conda create --name=neott python=3.10 
-conda activate neott
-conda install pytorch==2.1.1 torchvision==0.16.1 torchaudio==2.1.1 pytorch-cuda=11.8 -c pytorch -c nvidia
+mamba create --name=neott python=3.10 
+mamba activate neott
+mamba install pytorch=2.4.1 torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia
 git clone https://github.com/PaulLerner/neott.git
 pip install -e neott
 ```
