@@ -65,4 +65,4 @@ if __name__ == '__main__':
     data = get_data()
 
     with open("./data/TAL/terms/TAL_poc.json", "wt") as file:
-        json.dump(data, file)
+        json.dump({"test": data}, file)
