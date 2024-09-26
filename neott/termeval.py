@@ -6,7 +6,7 @@ import json
 from collections import Counter
 import pandas as pd
 
-from .utils import Path
+from pathlib import Path
 from .metrics import Preprocessor
 from .freq import build_automaton
 

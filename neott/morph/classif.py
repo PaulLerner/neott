@@ -14,7 +14,7 @@ from spacy.lang.fr import French
 
 import fasttext
 
-from ..utils import Path
+from pathlib import Path
 from .labels import MorphLabel
 
 

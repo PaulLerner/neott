@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from jsonargparse import CLI
-from .utils import Path, load_lightning
+from pathlib import Path
+from .utils import load_lightning
 
 
 def main(ckpt: Path = None, config_path: Path = None):

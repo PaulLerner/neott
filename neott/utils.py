@@ -1,15 +1,11 @@
 # -*- coding: utf-8 -*-
 import itertools
 import json
-from jsonargparse.typing import register_type
-from pathlib import Path
 import yaml
 
 import numpy as np
 
 from . import trainee
-
-register_type(Path, type_check=lambda v, t: isinstance(v, t))
 
 
 def load_lightning(ckpt: Path = None, config_path: Path = None):

@@ -10,7 +10,7 @@ import pandas as pd
 import datasets
 import ahocorasick
 
-from .utils import Path
+from pathlib import Path
 
 
 def build_automaton(terms):

@@ -4,11 +4,10 @@ import itertools
 from collections import Counter
 from jsonargparse import CLI
 import enum
+from pathlib import Path
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
-
-from ..utils import Path
 
 
 class MorphLabel(enum.Enum):

@@ -17,7 +17,8 @@ from transformers import AutoTokenizer
 import lightning as pl
 from lightning.cli import LightningCLI
 
-from ..utils import Path, load_json_line
+from ..utils import load_json_line
+from pathlib import Path
 from ..morph.labels import MorphLabel
 from ..morph.classif import Classifier
 from ..morph.derif import derifize

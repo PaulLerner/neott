@@ -7,11 +7,11 @@ import xml.etree.ElementTree as ET
 from tqdm import tqdm
 import re
 from jsonargparse import CLI
+from pathlib import Path
 
 import spacy
 
 from .labels import MorphLabel
-from ..utils import Path
 
 SPACY_2_DERIF = {'NOUN': 'NOM',
                  'ADJ': 'ADJ',
