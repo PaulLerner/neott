@@ -6,6 +6,7 @@ from jsonargparse import CLI
 from dataclasses import dataclass, asdict
 import json
 from typing import List, Union
+from pathlib import Path
 
 from torch.nn import CrossEntropyLoss
 from tqdm import tqdm
@@ -14,7 +15,7 @@ import numpy as np
 from torch.utils.data import DataLoader
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from .utils import infinite_random_data, all_size_combination, Path, ListOrArg, iter_kwargs_prod
+from .utils import infinite_random_data, all_size_combination, ListOrArg, iter_kwargs_prod
 from .metrics import compute_metrics, Preprocessor
 from .morph.labels import MorphLabel
 from .trainee import ModelKwargs, GenKwargs
