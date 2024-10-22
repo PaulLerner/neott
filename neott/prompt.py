@@ -379,10 +379,20 @@ def compute_ppl(eval_set, model, tokenizer, device="cuda"):
     prompt_sep = tokenizer.encode(':', add_special_tokens=False)
     assert len(prompt_sep) == 1, prompt_sep
     prompt_sep = prompt_sep[0]
-    losses, all_logits = [], []
+    ppls = []
+    bpcs = []
+    i = 0
+    morph_i = {label.name: [] for label in MorphLabel}
     for inputs in tqdm(eval_set):
         batch_size, seq_len = inputs["input_ids"].shape
-        inputs.pop("target_text")
+        target_text = inputs.pop("target_text")
+        n_chars = torch.tensor([len(t) for t in target_text]).to(device)
+        morphs = inputs.pop("morph")
+        for morph in morphs:
+            for label in morph:
+                morph_i[label].append(i)
+            i += 1
+        inputs.pop("syn")
         for k, v in inputs.items():
             inputs[k] = v.to(device)
         labels = inputs['input_ids'].clone()
@@ -398,13 +408,32 @@ def compute_ppl(eval_set, model, tokenizer, device="cuda"):
         # there's one token shift between input and output (causal LM)
         logits = logits[:, :-1].contiguous().view(-1, model.config.vocab_size)
         labels = labels[:, 1:].contiguous().view(-1)
-        loss = loss_fct(logits, labels).view(batch_size, seq_len-1).cpu()
-        losses.append(loss)
-        logits = logits.view(batch_size, seq_len - 1, model.config.vocab_size)
+        # compute total loss per example
+        loss = loss_fct(logits, labels).view(batch_size, seq_len-1).sum(1)
         labels = labels.view(batch_size, seq_len - 1)
-        all_logits.append(logits[labels != loss_fct.ignore_index].cpu())
-        # TODO compute PPL from cross-entropy/normalize with #chars
-    return losses, all_logits
+        # normalize loss per token -> exponentiate for PPL
+        ppl = (loss / (labels != loss_fct.ignore_index).sum(1)).exp()
+        ppls.append(ppl.cpu())
+        # normalize loss per char
+        bpc = loss / n_chars
+        bpcs.append(bpc.cpu())
+
+    ppls = torch.cat(ppls)
+    bpcs = torch.cat(bpcs)
+    metrics = {
+        "ppl": ppls.mean().item(),
+        "bpc": bpcs.mean().item(),
+        "ppls": ppls.tolist(),
+        "bpcs": bpcs.tolist()
+    }
+    # FIXME: refactor the code in metrics which is nearly identical
+    for label, i in morph_i.items():
+        if not i:
+            continue
+        i = torch.tensor(i, dtype=int)
+        metrics[f"ppl_{label}"] = ppls[i].mean().item()
+        metrics[f"bpc_{label}"] = bpcs[i].mean().item()
+    return {"metrics": metrics}
 
 
 def evaluate(eval_set, model, tokenizer, gen_kwargs, preproc, device="cuda"):
@@ -476,10 +505,7 @@ def prompt(eval_set, icl_set, model, tokenizer, data_collator, src: str = "en", 
     icl_indices = icl(eval_set, icl_set, template_kwargs, ppl=ppl, tokenizer=data_collator.tokenizer, **kwargs)
     eval_set = DataLoader(eval_set, collate_fn=data_collator.collate_fn, shuffle=False, **asdict(data_kwargs))
     if ppl:
-        losses, all_logits = compute_ppl(eval_set, model, tokenizer, device=device)
-        torch.save(losses, output_path/"losses.bin")
-        torch.save(all_logits, output_path/"logits.bin")
-        return {}
+        output = compute_ppl(eval_set, model, tokenizer, device=device)
     else:
         output, token_outputs = evaluate(eval_set, model, tokenizer, gen_kwargs=asdict(gen_kwargs), preproc=preproc,
                                          device=device)
