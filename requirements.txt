@@ -1,6 +1,6 @@
 datasets==2.16.1
 editdistance==0.6.2
-jsonargparse==4.30.0
+jsonargparse==4.33.2
 matplotlib==3.8.2
 numpy==1.26.2
 pandas==2.1.4
@@ -16,7 +16,7 @@ bitsandbytes==0.42.0
 fasttext @ git+https://github.com/facebookresearch/fastText@b733943e84263f432fa47588643822194ee03dd1
 lightning==1.9.5
 scikit-learn==1.5.2
-
+tensorboard==2.18.0
 # pytorch: better use mamba
 # mamba install pytorch=2.4.1 torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia
 #pytorch==2.4.1
