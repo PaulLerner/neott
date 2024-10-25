@@ -379,14 +379,15 @@ def compute_ppl(eval_set, model, tokenizer, device="cuda"):
     prompt_sep = tokenizer.encode(':', add_special_tokens=False)
     assert len(prompt_sep) == 1, prompt_sep
     prompt_sep = prompt_sep[0]
-    ppls = []
-    bpcs = []
+    total_losses = []
+    all_losses = []
+    n_tokens, n_chars = [], []
     i = 0
     morph_i = {label.name: [] for label in MorphLabel}
     for inputs in tqdm(eval_set):
         batch_size, seq_len = inputs["input_ids"].shape
         target_text = inputs.pop("target_text")
-        n_chars = torch.tensor([len(t) for t in target_text]).to(device)
+        n_chars.append(torch.tensor([len(t) for t in target_text]).to(device))
         morphs = inputs.pop("morph")
         for morph in morphs:
             for label in morph:
@@ -409,29 +410,34 @@ def compute_ppl(eval_set, model, tokenizer, device="cuda"):
         logits = logits[:, :-1].contiguous().view(-1, model.config.vocab_size)
         labels = labels[:, 1:].contiguous().view(-1)
         # compute total loss per example
-        loss = loss_fct(logits, labels).view(batch_size, seq_len-1).sum(1)
+        losses = loss_fct(logits, labels).view(batch_size, seq_len-1)
+        total_losses.append(losses.sum(1))
         labels = labels.view(batch_size, seq_len - 1)
-        # normalize loss per token -> exponentiate for PPL
-        ppl = (loss / (labels != loss_fct.ignore_index).sum(1)).exp()
-        ppls.append(ppl.cpu())
-        # normalize loss per char
-        bpc = loss / n_chars
-        bpcs.append(bpc.cpu())
+        n_tokens.append((labels != loss_fct.ignore_index).sum(1))
+        for loss, label in zip(losses, labels):
+            all_losses.append(loss[label != loss_fct.ignore_index].tolist())
 
-    ppls = torch.cat(ppls)
-    bpcs = torch.cat(bpcs)
+    total_losses = torch.cat(total_losses)
+    n_chars = torch.cat(n_chars)
+    n_tokens = torch.cat(n_tokens)
+
+    # normalize loss per token
+    term_losses = total_losses / n_tokens
+    # normalize loss per char
+    bpcs = total_losses / n_chars
     metrics = {
-        "ppl": ppls.mean().item(),
+        "ppl": term_losses.mean().exp().item(),
         "bpc": bpcs.mean().item(),
-        "ppls": ppls.tolist(),
-        "bpcs": bpcs.tolist()
+        "bpcs": bpcs.tolist(),
+        "term_loss": term_losses.tolist(),
+        "token_loss": all_losses
     }
     # FIXME: refactor the code in metrics which is nearly identical
     for label, i in morph_i.items():
         if not i:
             continue
         i = torch.tensor(i, dtype=int)
-        metrics[f"ppl_{label}"] = ppls[i].mean().item()
+        metrics[f"ppl_{label}"] = term_losses[i].mean().exp().item()
         metrics[f"bpc_{label}"] = bpcs[i].mean().item()
     return {"metrics": metrics}
 
