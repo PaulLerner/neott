@@ -45,29 +45,32 @@ def compute_accuracy(argmax, sorted_vocab, start_indices, intra_indices, START_O
     print()
 
 
-def compute_alignment(model_name: str, word_embeddings, vocab, START_OF_WORD_CHAR, alpha_filter: bool = False,
-                      negatives: Negatives = Negatives.intra_pair):
+def split_start_intra(vocab, START_OF_WORD_CHAR, alpha_filter: bool = False):
     not_word = re.compile(r"[^A-Za-z]")
     starts = {token[1:] for token in vocab if token[0] == START_OF_WORD_CHAR and ((not alpha_filter) or not_word.search(token[1:]) is None)}
     pairs = starts & vocab.keys()
-    logger.debug(f"{len(starts)=} {len(pairs)=}")
 
     # defaults to Negatives.intra_pair but may get overwritten
     start_indices, intra_indices = [], []
     for token in pairs:
         start_indices.append(vocab[START_OF_WORD_CHAR + token])
         intra_indices.append(vocab[token])
-    sorted_vocab = sorted(vocab, key=vocab.get)
 
     start_indices = torch.tensor(start_indices, dtype=int)
+    intra_indices = torch.tensor(intra_indices, dtype=int)
 
+    return start_indices, intra_indices, starts, pairs
+
+
+def compute_alignment(model_name: str, word_embeddings, vocab, START_OF_WORD_CHAR, alpha_filter: bool = False,
+                      negatives: Negatives = Negatives.intra_pair):
+    start_indices, intra_indices, starts, pairs = split_start_intra(vocab, START_OF_WORD_CHAR, alpha_filter=alpha_filter)
+    logger.debug(f"{len(starts)=} {len(pairs)=}")
+    sorted_vocab = sorted(vocab, key=vocab.get)
     if negatives == Negatives.all_intra:
         intra_indices = torch.tensor([v for k, v in vocab.items() if k[0] != START_OF_WORD_CHAR], dtype=int)
     elif negatives == Negatives.all:
         intra_indices = torch.arange(len(word_embeddings), dtype=int)
-    else:
-        intra_indices = torch.tensor(intra_indices, dtype=int)
-
     logger.debug(f"{len(start_indices)=} {len(intra_indices)=}")
 
     start_embeddings = word_embeddings[start_indices]
