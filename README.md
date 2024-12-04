@@ -1,9 +1,12 @@
 ![logo](./viz/matos-logo.png)
 
 # neott
-Source code and data for the paper 
-[Vers la traduction automatique des néologismes scientifiques (Towards Machine Translation of Scientific Neologisms)](https://inria.hal.science/hal-04623021/) 
-by Lerner and Yvon (2024, referred to as TALN 2024 hereafter).
+Source code and data for the papers by Lerner and Yvon: 
+- Towards the Machine Translation of Scientific Neologisms 
+- Unlike “Likely”, “Unlike” is Unlikely: BPE-based Segmentation hurts Morphological Derivations in LLMs 
+
+(Note some work was also [published in French](https://inria.hal.science/hal-04623021/))
+
 
 Work done within the [MaTOS](https://anr-matos.github.io/) ANR project.
 
@@ -20,36 +23,84 @@ pip install -e neott
 ```
 
 # Experiments
-## Download Data
+## Translation Experiments
+This section describe how to reproduce the experiments of the paper *Towards the Machine Translation of Scientific Neologisms*.
+
+[Jump here for experiments of *Unlike “Likely”, “Unlike” is Unlikely: BPE-based Segmentation hurts Morphological Derivations in LLMs*](#BPE-Experiments)
+
+### Download Data
 
 - https://github.com/ANR-MaTOS/france_terme FranceTerme
 - https://github.com/ANR-MaTOS/termium complete TERMIUM thesaurus (not Symptoms subset used in the TALN 2024 paper)
-- https://github.com/ANR-MaTOS/symptoms TERMIUM Symptoms subset
+- https://github.com/ANR-MaTOS/symptoms TERMIUM Symptoms subset (not used in the COLING paper, only in the French TALN 2024 paper)
 
-## prompt LLM
-### validate prompt hyperparam (template_form, TALN 2024 fig. 2 left)
+### prompt LLM
 
-
-`python -m neott.prompt --config=exp/prompt/template_form.yaml`
-
-You can evaluate a different model by using `--model_kwargs.pretrained_model_name_or_path=croissantllm/CroissantLLMBase` for example.
-
-### test (TALN 2024 fig. 2 right)
-
-`python -m neott.prompt --config=exp/prompt/test.yaml`
+With random ICL:
+`python -m neott.prompt --config=exp/trad/prompt/test.yaml`
 
 Change dataset with `--eval_path=data/termium/termium.json` for example.
 
-## translate with mBART
+Note you can validate which prompt to use using:
+`python -m neott.prompt --config=exp/trad/prompt/template_form.yaml`
+
+You can evaluate a different model by using `--model_kwargs.pretrained_model_name_or_path=croissantllm/CroissantLLMBase` for example.
+
+You can use different ICL methods:
+- Domain:
+    ```yaml
+    selector_kwargs:
+    - n_icl: 5
+      selector: domain
+      domain_key: "Dom"
+    ```
+- Co-hyponyms
+    ```yaml
+    selector_kwargs:
+    - definition: true
+      n_icl: 5
+      selector: longest
+    ```
+- Derivation paradigms:
+  - Matching the beginning of strings:
+    ```yaml
+    selector_kwargs:
+    - definition: false
+      n_icl: 5
+      selector: longest
+    ```
+  - Matching the end of strings:
+    ```yaml
+    selector_kwargs:
+    - definition: false
+      n_icl: 5
+      selector: longest
+      start: false
+    ```
+- Combine Co-hyponyms and Derivation paradigms:
+  ```yaml
+    - definition: true
+      n_icl: 1
+      selector: longest
+    - definition: false
+      n_icl: 3
+      selector: longest
+    - definition: false
+      n_icl: 1
+      selector: longest
+      start: false
+  ```
+
+### translate with mBART
 TODO
 
-## visualization
-### freq
+### visualization
+#### freq
 `python -m neott.freq data/france_terme/france_terme.json data/roots/ data/france_terme/freq_roots_fr_whole_word.json --whole_word=true --batch_size=10000`
 
 `python -m neott.freq data/france_terme/france_terme.json /gpfsdswork/dataset/OSCAR/fr_meta/ data/france_terme/freq_oscar_fr_whole_word.json --whole_word=true --batch_size=10000 --hf=false`
 
-### analyze
+#### analyze
 
 You can reproduce all analyses using `neott.viz.analyze` 
 (note metrics are not recomputed but are stored in the output, you can recompute them using `neott.metrics`)
@@ -57,46 +108,113 @@ You can reproduce all analyses using `neott.viz.analyze`
 `python -m neott.viz.analyze data/france_terme/france_terme.json exp/prompt/test/output.json --tokenizer=bigscience/bloom-7b1 --morpher=models/morph/fr/model.bin --freq_paths=data/france_terme/freq_roots_fr_whole_word.json --freq_paths+=data/france_terme/freq_oscar_fr_whole_word.json`
 
 obviously, all optional arguments are optional:
-- tokenizer is used to compute fertility (TALN 2024 fig. 4)
-- morpher for morph accuracy (TALN 2024 fig. 3)
-- freq_paths for EM wrt. term occurences (TALN 2024 fig. 5)
+- freq_paths for EM wrt. term occurences (COLING fig. 4)
+- morpher for morph accuracy (COLING fig. 5)
+- tokenizer is used to compute fertility (COLING fig. 7)
 
 If you do not rerun the experiments, you can use our outputs provided in the same repositories as the datasets (e.g. `france_terme/taln_2024/bloom-7b1/output.json`)
 
 
 
-## morph
+### morph
 for each language
 
-### download data
+#### download data
 - https://github.com/kbatsuren/MorphyNet/tree/378144f64df58c78db5245af19d16a511ccecf3a MorphyNet
 - https://github.com/sigmorphon/2022SegmentationST/tree/ac161e1107e423577e922b05f8c43c6ebad6722a SIGMORPHON
 
-### train a classifier on SIGMORPHON/MorphyNet
-#### generate data from SIGMORPHON/MorphyNet
+#### train a classifier on SIGMORPHON/MorphyNet
+##### generate data from SIGMORPHON/MorphyNet
 `python -m neott.morph.labels`
 
-#### train classifier
+##### train classifier
 `python -m neott.morph.classif train`
 
-### predict on data
+#### predict on data
 `python -m neott.morph.classif --model_path=models/morph/fr/model.bin --lang=fr predict data/france_terme/france_terme.json`
 
 `python -m neott.morph.classif --model_path=models/morph/en/model.bin --lang=en predict data/france_terme/france_terme.json`
 
-## Data/preproc
+### Data/preproc
 The datasets provided through separate repositories above have been preprocessed with the following pipeline (no need to rerun).
 
 `python -m neott.data.{termium|franceterme}`
 
-
 `python -m neott.data.filter`
-
-
 
 `python -m neott.data.split`
 
 `python -m neott.tag`
+
+## BPE Experiments
+This section describe how to reproduce the experiments of the paper 
+*Unlike “Likely”, “Unlike” is Unlikely: BPE-based Segmentation hurts Morphological Derivations in LLMs*
+
+### Download data
+Data is in a separate repository: https://github.com/PaulLerner/unlikely
+
+Each dataset is in a JSON file named like in the paper (e.g. attested French adjectival bases = `adj_fr.json`).
+
+The `*_with_space.json` files correspond to the morphological segmentation experiment. 
+It is the same derivative as in the standard file but with a space around the affix to enforce morphological segmentation.
+
+For example:
+```
+$ python -m json.tool adj_en.json | head
+{
+    "train": [
+        {
+            "id": "unritual",
+            "en": {
+                "text": "unritual",
+                "def": {
+                    "text": "Not ritual"
+                },
+                
+$ python -m json.tool adj_en_with_space.json | head
+{
+    "train": [
+        {
+            "id": "un ritual",
+            "en": {
+                "text": "un ritual",
+                "def": {
+                    "text": "Not ritual"
+                },
+
+```
+
+### Prompt LLM
+
+The main experiment (Figure 2) can be reproduced with the same code as for the translation experiments:
+
+For random ICL:
+`python -m neott.prompt --config=exp/bpe/test.yaml`
+
+Beware that 
+```yaml
+  tgt: fr
+  template_lang: fr
+  def_lang: fr
+```
+
+Should match the dataset language (`data/adj_fr.json` in the example)
+
+For morphological ICL (the ICL examples match the morphology of the input), use 
+
+```yaml
+selector_kwargs:
+  n_icl: 5
+  selector: morph
+  morph_lang: fr
+  morph_key: morph_label
+```
+
+For example: `python -m neott.prompt --config=exp/bpe/morph/test.yaml`
+
+### Alignment analysis
+
+TODO 
 
 # citation
 If you use our code or data please cite

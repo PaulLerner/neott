@@ -1,18 +1,13 @@
-eval_path: data/france_terme/france_terme.json
-eval_set: train
-icl_set: test
+eval_path: data/adj_fr.json
+eval_set: test
+icl_set: train
 prompt_kwargs:
   seed: 0
-  src: en
   tgt: fr
-  template_lang: 
-  - fr
-  - en
+  template_lang: fr
   def_lang: fr
   template_form: 
   - term
-  - def
-  - def+term
 model_kwargs:
   pretrained_model_name_or_path: bigscience/bloom-7b1
   device_map: cuda
@@ -42,4 +37,4 @@ add_prefix_space: true
 gen_kwargs:
   num_beams: 1
   max_new_tokens: 32
-output_path: exp/prompt/template_form
+output_path: exp/bpe

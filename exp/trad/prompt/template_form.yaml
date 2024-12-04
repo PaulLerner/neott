@@ -1,11 +1,13 @@
 eval_path: data/france_terme/france_terme.json
-eval_set: test
-icl_set: train
+eval_set: train
+icl_set: test
 prompt_kwargs:
   seed: 0
   src: en
   tgt: fr
-  template_lang: fr
+  template_lang: 
+  - fr
+  - en
   def_lang: fr
   template_form: 
   - term
@@ -40,4 +42,6 @@ add_prefix_space: true
 gen_kwargs:
   num_beams: 1
   max_new_tokens: 32
-output_path: exp/prompt/test
+output_path: exp/trad/prompt/template_form
+selector_kwargs:
+- n_icl: 5

@@ -1,0 +1,45 @@
+eval_path: data/france_terme/france_terme.json
+eval_set: test
+icl_set: train
+prompt_kwargs:
+  seed: 0
+  src: en
+  tgt: fr
+  template_lang: fr
+  def_lang: fr
+  template_form: 
+  - term
+  - def
+  - def+term
+model_kwargs:
+  pretrained_model_name_or_path: bigscience/bloom-7b1
+  device_map: cuda
+  config: null
+  cache_dir: null
+  ignore_mismatched_sizes: false
+  force_download: false
+  local_files_only: false
+  token: null
+  revision: main
+  use_safetensors: null
+  resume_download: false
+  output_loading_info: false
+  torch_dtype: null
+  load_in_8bit: true
+  load_in_4bit: false
+  use_flash_attention_2: false
+data_kwargs:
+  batch_size: 32
+  num_workers: 4
+tokenizer_kwargs:
+  return_tensors: pt
+  padding: longest
+  truncation: false
+  return_overflowing_tokens: false
+add_prefix_space: true
+gen_kwargs:
+  num_beams: 1
+  max_new_tokens: 32
+output_path: exp/trad/prompt/test
+selector_kwargs:
+- n_icl: 5
