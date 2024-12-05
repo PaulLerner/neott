@@ -94,6 +94,31 @@ You can use different ICL methods:
 ### translate with mBART
 TODO
 
+### evaluation
+
+Metrics are computed after generation. To reevaluate your output or our outputs 
+(provided in the same repositories as the datasets, e.g. `france_terme/coling_2025/random_icl/bloom-7b1/output.json`)
+use `neott.metrics` like so:
+```py
+import json
+from neott.metrics import compute_metrics, Preprocessor
+
+with open("france_terme/france_terme.json","rt") as file:
+    data = json.load(file)
+
+preproc = Preprocessor("fr")
+
+targets = [item["fr"]["text"] for item in data["test"]]
+
+with open("france_terme/coling_2025/random_icl/bloom-7b1/output.json","rt") as file:
+    outputs = [json.loads(line) for line in file.read().strip().split("\n")]
+
+for output in outputs:
+    metrics = compute_metrics(predictions=output["predictions"],syns=targets,targets=targets,preproc=preproc)
+    # Numbers reported in COLING Table 1
+    print(output["hyperparameters"],metrics["em"])
+```
+
 ### visualization
 #### freq
 `python -m neott.freq data/france_terme/france_terme.json data/roots/ data/france_terme/freq_roots_fr_whole_word.json --whole_word=true --batch_size=10000`
@@ -103,7 +128,7 @@ TODO
 #### analyze
 
 You can reproduce all analyses using `neott.viz.analyze` 
-(note metrics are not recomputed but are stored in the output, you can recompute them using `neott.metrics`)
+(note metrics are not recomputed but are stored in the output, you can recompute them using `neott.metrics` as instructed above)
 
 `python -m neott.viz.analyze data/france_terme/france_terme.json exp/prompt/test/output.json --tokenizer=bigscience/bloom-7b1 --morpher=models/morph/fr/model.bin --freq_paths=data/france_terme/freq_roots_fr_whole_word.json --freq_paths+=data/france_terme/freq_oscar_fr_whole_word.json`
 
@@ -111,8 +136,6 @@ obviously, all optional arguments are optional:
 - freq_paths for EM wrt. term occurences (COLING fig. 4)
 - morpher for morph accuracy (COLING fig. 5)
 - tokenizer is used to compute fertility (COLING fig. 7)
-
-If you do not rerun the experiments, you can use our outputs provided in the same repositories as the datasets (e.g. `france_terme/taln_2024/bloom-7b1/output.json`)
 
 
 
@@ -214,7 +237,27 @@ For example: `python -m neott.prompt --config=exp/bpe/morph/test.yaml`
 
 ### Alignment analysis
 
-TODO 
+To reproduce the alignment analysis of Section 4.2, use `python -m neott.viz.pvs <model_name>`
+
+For example `python -m neott.viz.pvs bigscience/bloom-7b1` gives the following table:
+
+| model        | filter `A-Za-z` | # pairs | negatives         | P@1 (cs) | P@1 (ci) | matches upper | matches other start |    
+| ------------ | --------------- | ------- | ----------------- | -------- | -------- | ------------- | ------------------- | 
+| bloom-7b1    | False           | 30,496  | 30,495 intra_pair | 67.6%    | 72.2%    | 7.0%          | -                   |     
+| bloom-7b1    | False           | 30,496  | 111,326 all_intra | 65.4%    | 70.2%    | 3.7%          | -                   |     
+| bloom-7b1    | False           | 30,496  | 250,679 all       | 32.6%    | 32.9%    | 0.4%          | 60.3%               |     
+| bloom-7b1    | True            | 13,365  | 13,364 intra_pair | 81.2%    | 90.7%    | 4.9%          | -                   |     
+| bloom-7b1    | True            | 13,365  | 111,326 all_intra | 76.3%    | 85.6%    | 1.8%          | -                   |     
+| bloom-7b1    | True            | 13,365  | 250,679 all       | 38.8%    | 39.3%    | 0.1%          | 59.3%               |     
+
+In the paper, we only reported P@1 (cs) using all_intra as negatives as we believe it is the more meaningful metric.
+Indeed, using all embeddings as negatives, you see that you most often match another initial-word embedding.
+As a side note, notice that the match is often the same token but written with an initial upper case, hence the "case insensitive (ci)" P@1.
+
+filter `A-Za-z` only makes a significant difference for BLOOM which vocabulary is quite noisy.
+
+Summing up, you can pass arguments like `python -m neott.viz.pvs bigscience/bloom-7b1 --alpha_filter=true --negatives=all_intra` 
+to only get the relevant metric for BLOOM, and `--alpha_filter=false` for Croissant and Llama.
 
 # citation
 If you use our code or data please cite
