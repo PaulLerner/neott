@@ -21,7 +21,6 @@ from ..utils import load_json_line
 from pathlib import Path
 from ..morph.labels import MorphLabel
 from ..morph.classif import Classifier
-from ..morph.derif import derifize
 from .freq import main as viz_freq
 
 
