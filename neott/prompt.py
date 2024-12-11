@@ -226,22 +226,28 @@ class SelectorFusion:
                 yield j, eg
 
 
+def icl_item(item, icl_gen, template_kwargs, ppl: bool = False, def_lang: str = "fr", src="en"):
+    icl_eg = []
+    icl_index = []
+    for j, eg in icl_gen(item):
+        icl_eg.append(fill_template(eg, icl=True, def_lang=def_lang, src=src, **template_kwargs))
+        icl_index.append(j)
+    icl_eg.append(fill_template(item, icl=ppl, def_lang=def_lang, src=src, **template_kwargs))
+    input_text = f" {ICL_SEP} ".join(icl_eg)
+    return input_text, icl_index
+
+
 def icl(eval_set, icl_set, template_kwargs, seed: int = 0, ppl: bool = False,
         chat: bool = False, def_lang: str = "fr", src="en", **kwargs):
     np.random.seed(seed)
     icl_gen = SelectorFusion(icl_set=icl_set, def_lang=def_lang, src=src, **kwargs)
     icl_indices = []
     for item in eval_set:
-        icl_eg = []
-        icl_index = []
-        for j, eg in icl_gen(item):
-            icl_eg.append(fill_template(eg, icl=True, def_lang=def_lang, src=src, **template_kwargs))
-            icl_index.append(j)
+        input_text, icl_index = icl_item(item, icl_gen, template_kwargs, ppl=ppl, def_lang=def_lang, src=src)
         icl_indices.append(icl_index)
-        icl_eg.append(fill_template(item, icl=ppl, def_lang=def_lang, src=src, **template_kwargs))
-        item["input_text"] = f" {ICL_SEP} ".join(icl_eg)
         if chat:
-            item["input_text"] = CHAT_USER_START + item["input_text"] + CHAT_USER_END
+            input_text = CHAT_USER_START + input_text + CHAT_USER_END
+        item["input_text"] = input_text
     return icl_indices
 
 
@@ -249,6 +255,7 @@ def post_proc(predictions):
     proc_predictions = []
     for pred in predictions:
         # because ICL_SEP is not a special token it gets decoded by the tokenizer
+        # FIXME add it as eos_token_id
         i = pred.find(ICL_SEP)
         if i < 0:
             proc_predictions.append(pred)
@@ -325,12 +332,17 @@ def compute_ppl(eval_set, model, tokenizer, device="cuda"):
     return {"metrics": metrics}
 
 
-def evaluate(eval_set, model, tokenizer, gen_kwargs, preproc, device="cuda"):
-    predictions, targets, morphs, syns = [], [], [], []
+def get_eos(tokenizer):
     icl_sep_id = tokenizer.encode(ICL_SEP, add_special_tokens=False)
     assert len(icl_sep_id) == 1, icl_sep_id
     assert tokenizer.eos_token_id is not None
     eos_token_id = [tokenizer.eos_token_id, icl_sep_id[0]]
+    return eos_token_id
+
+
+def evaluate(eval_set, model, tokenizer, gen_kwargs, preproc, device="cuda"):
+    predictions, targets, morphs, syns = [], [], [], []
+    eos_token_id = get_eos(tokenizer)
     token_outputs = []
     for inputs in tqdm(eval_set):
         batch_size, seq_len = inputs["input_ids"].shape
@@ -382,15 +394,20 @@ class DataCollator:
         return inputs
 
 
+def get_template_kwargs(src: str = "en", tgt: str = "fr", template_lang: str = "fr", template_form: str = "term"):
+    src_lang = LANGUAGES[template_lang][src]
+    tgt_lang = LANGUAGES[template_lang][tgt]
+    template = PROMPTS[template_lang][template_form]
+    template_kwargs = dict(src_lang=src_lang, tgt_lang=tgt_lang, template=template, tgt=tgt)
+    return template_kwargs
+
+
 def prompt(eval_set, icl_set, model, tokenizer, data_collator, src: str = "en", tgt: str = "fr",
            template_lang: str = "fr", template_form: str = "term", device="cuda",
            data_kwargs: DataKwargs = DataKwargs(), gen_kwargs: GenKwargs = GenKwargs(), output_path: Path = None,
            ppl: bool = False, hyperparameters=None, **kwargs):
     preproc = Preprocessor(tgt)
-    src_lang = LANGUAGES[template_lang][src]
-    tgt_lang = LANGUAGES[template_lang][tgt]
-    template = PROMPTS[template_lang][template_form]
-    template_kwargs = dict(src_lang=src_lang, tgt_lang=tgt_lang, template=template, tgt=tgt)
+    template_kwargs = get_template_kwargs(src=src, tgt=tgt, template_lang=template_lang, template_form=template_form)
     icl_indices = icl(eval_set, icl_set, template_kwargs, ppl=ppl, tokenizer=data_collator.tokenizer, **kwargs)
     eval_set = DataLoader(eval_set, collate_fn=data_collator.collate_fn, shuffle=False, **asdict(data_kwargs))
     if ppl:
