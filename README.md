@@ -259,6 +259,14 @@ filter `A-Za-z` only makes a significant difference for BLOOM which vocabulary i
 Summing up, you can pass arguments like `python -m neott.viz.pvs bigscience/bloom-7b1 --alpha_filter=true --negatives=all_intra` 
 to only get the relevant metric for BLOOM, and `--alpha_filter=false` for Croissant and Llama.
 
+# Interactive demo
+
+Use `neott.interact` to interactively translate source terms/generate terms given a definition.
+
+For example: `python -m neott.interact --config exp/interact.yaml` will apply our ICL method that combines Co-hyponyms and Derivation paradigms,
+using FranceTerme as ICL set. You can change the parameters as for `neott.prompt`
+
+
 # citation
 If you use our code or data on Machine Translation, please cite:
 
