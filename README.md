@@ -2,8 +2,8 @@
 
 # neott
 Source code and data for the papers by Lerner and Yvon: 
-- Towards the Machine Translation of Scientific Neologisms 
-- Unlike “Likely”, “Unlike” is Unlikely: BPE-based Segmentation hurts Morphological Derivations in LLMs 
+- [Towards the Machine Translation of Scientific Neologisms](https://hal.science/hal-04835653) 
+- [Unlike “Likely”, “Unlike” is Unlikely: BPE-based Segmentation hurts Morphological Derivations in LLMs](https://hal.science/hal-04831106) 
 
 (Note some work was also [published in French](https://inria.hal.science/hal-04623021/))
 
@@ -260,8 +260,32 @@ Summing up, you can pass arguments like `python -m neott.viz.pvs bigscience/bloo
 to only get the relevant metric for BLOOM, and `--alpha_filter=false` for Croissant and Llama.
 
 # citation
-If you use our code or data please cite
+If you use our code or data on Machine Translation, please cite:
 
+```bib
+@inproceedings{coling2025trad,
+    title = {{Towards the Machine Translation of Scientific Neologisms}},
+	author={Lerner, Paul and Yvon, François},
+    booktitle = "Proceedings of the 31st International Conference on Computational Linguistics",
+    year = "2025",
+    url={https://hal.science/hal-04835653},
+    publisher = "International Committee on Computational Linguistics"
+}
+```
+
+If you use our code or data on BPE, please cite:
+```bib
+@inproceedings{coling2025pvs,
+    title = {{Unlike ``Likely'', ``Unlike'' is Unlikely: BPE-based Segmentation hurts Morphological Derivations in LLMs}},
+	author={Lerner, Paul and Yvon, François},
+    booktitle = "Proceedings of the 31st International Conference on Computational Linguistics",
+    url={https://hal.science/hal-04831106},
+    year = "2025",
+    publisher = "International Committee on Computational Linguistics"
+}
+```
+
+Note part of the Machine Translation was published in French. If you wish to disseminate our work in French, please cite:
 ```bib
 @inproceedings{lerner:hal-04623021,
   TITLE = {{Vers la traduction automatique des n{\'e}ologismes scientifiques}},
