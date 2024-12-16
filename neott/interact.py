@@ -45,7 +45,7 @@ def user_loop(required_fields, src: str = "en", def_lang: str = "fr", *args, **k
         item = {"id": None, src: {}, def_lang: {}}
         item[src]["text"] = src_term
         item[def_lang]["def"] = {"text": src_def}
-        output = prompt(item, *args, **kwargs)[0]
+        output = prompt(item, *args, **kwargs)
         print(f"{output}\n")
 
 
