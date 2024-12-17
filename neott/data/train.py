@@ -82,7 +82,7 @@ class DataKwargs:
 @dataclass
 class TokenizerKwargs:
     return_tensors: str = 'pt'
-    padding: str = 'longest'
+    padding: Union[bool, str] = 'longest'
     truncation: bool = False
     return_overflowing_tokens: bool = False
     max_length: int = None
