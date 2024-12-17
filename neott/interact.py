@@ -1,3 +1,7 @@
+import warnings
+warnings.filterwarnings('ignore')
+
+
 from jsonargparse import CLI
 from dataclasses import asdict
 import json
