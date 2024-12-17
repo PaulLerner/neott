@@ -1,6 +1,8 @@
 import warnings
 warnings.filterwarnings('ignore')
 
+from transformers.utils import logging
+logging.set_verbosity_error()
 
 from jsonargparse import CLI
 from dataclasses import asdict
