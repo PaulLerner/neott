@@ -22,10 +22,7 @@ def prompt(item, model, tokenizer, icl_gen, template_kwargs, gen_kwargs, tokeniz
     output = model.generate(eos_token_id=eos_token_id, return_dict_in_generate=True,
                             pad_token_id=tokenizer.pad_token_id, **inputs, **gen_kwargs).sequences
     # keep only newly generated tokens
-    if tokenizer.padding_side == 'left':
-        output = output[:, seq_len:].cpu()
-    else:
-        raise NotImplementedError(f"{tokenizer.padding_side=}")
+    output = output[:, seq_len:].cpu()
     output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
     output_text = post_proc(output_text)
     return output_text[0]
