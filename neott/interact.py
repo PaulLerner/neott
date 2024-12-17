@@ -71,7 +71,9 @@ def main(icl_path: Path, prompt_kwargs: PromptKwargs = PromptKwargs(), model_kwa
 
     model = AutoModelForCausalLM.from_pretrained(**asdict(model_kwargs), trust_remote_code=True).eval()
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, add_prefix_space=add_prefix_space, add_eos_token=False, trust_remote_code=True)
-
+    if tokenizer.pad_token is None:
+        warnings.warn(f"{tokenizer.pad_token=}, setting to {tokenizer.eos_token=}")
+        tokenizer.pad_token = tokenizer.eos_token
     template_kwargs = get_template_kwargs(src=prompt_kwargs.src, tgt=prompt_kwargs.tgt,
                                           template_lang=prompt_kwargs.template_lang,
                                           template_form=prompt_kwargs.template_form)
