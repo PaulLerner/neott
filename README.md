@@ -92,7 +92,7 @@ You can use different ICL methods:
   ```
 
 ### translate with mBART
-TODO
+Please refer to https://github.com/ziqianPeng/fairseq/tree/mBART/examples/mbart/translation
 
 ### evaluation
 
